@@ -10,10 +10,16 @@ class ExcelParser {
     fun parseWorkbook(inputStream: InputStream, worksheetId: String): List<Consumer> {
         val consumers = mutableListOf<Consumer>()
 
+        // ✅ ДОБАВЛЕНО: Начало парсинга
+        println("🔍 ExcelParser: начал парсинг, worksheetId=$worksheetId")
+
         try {
             inputStream.use { stream ->
                 val workbook = WorkbookFactory.create(stream) as XSSFWorkbook
                 val sheet = workbook.getSheetAt(0) // Первый лист
+
+                // ✅ ДОБАВЛЕНО: Информация о листе
+                println("🔍 ExcelParser: лист найден, строк: ${sheet.lastRowNum}")
 
                 // Начинаем с 3-й строки (индекс 2), так как 1-я и 2-я - заголовки
                 for (rowIndex in 2..sheet.lastRowNum) {
@@ -26,6 +32,9 @@ class ExcelParser {
                     val name = getCellValue(row, 3) // Колонка D (индекс 3)
                     val phone = getCellValue(row, 5) // Колонка F (индекс 5)
                     val rawAddress = getCellValue(row, 18) // Колонка S (индекс 18)
+
+                    // ✅ ДОБАВЛЕНО: Отладочный вывод для каждого потребителя
+                    println("🔍 ExcelParser: найден потребитель - ОР: $orNumber, Имя: $name")
 
                     // Финансовые данные
                     val meterNumber = getCellValue(row, 23) // Колонка X (индекс 23)
@@ -43,14 +52,11 @@ class ExcelParser {
                     // ИЗМЕНЕНИЕ: Приоритет для "Сума попередження" (колонка Z)
                     val consumer = Consumer(
                         id = "${worksheetId}_$orNumber",
-                        worksheetId = worksheetId, // <-- Уже на месте
+                        worksheetId = worksheetId,
                         orNumber = orNumber,
                         name = name.ifEmpty { "Данних немає" },
                         phone = phone.ifEmpty { null },
                         rawAddress = rawAddress.ifEmpty { "Данних немає" },
-                        shortAddress = shortAddress,
-                        // ИЗМЕНЕНИЕ: Сначала берем warningSum (колонка Z - Сума попередження)
-                        // Если warningSum null, берем currentDebt (колонка AB - Сума поточного боргу)
                         debtAmount = warningSum ?: currentDebt,
                         meterNumber = meterNumber.ifEmpty { null },
                         isProcessed = false
@@ -58,8 +64,13 @@ class ExcelParser {
 
                     consumers.add(consumer)
                 }
+
+                // ✅ ДОБАВЛЕНО: Итог парсинга
+                println("🔍 ExcelParser: успешно спарсено ${consumers.size} потребителей")
             }
         } catch (e: Exception) {
+            // ✅ ДОБАВЛЕНО: Подробное логирование ошибки
+            println("❌ ExcelParser: ОШИБКА - ${e.message}")
             e.printStackTrace()
             throw RuntimeException("Помилка парсингу Excel файлу: ${e.message}")
         }

@@ -1,15 +1,24 @@
 package com.roninsoulkh.mappingop.domain.models
 
-import java.util.UUID
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
+@Entity(tableName = "worksheet")
 data class Worksheet(
-    val id: String = UUID.randomUUID().toString(),
+    @PrimaryKey
+    val id: String,
+    @ColumnInfo(name = "file_name")
     val fileName: String,
-    val displayName: String = fileName.replace(".xlsx", "").replace(".xls", ""),
+    @ColumnInfo(name = "import_date")
     val importDate: Long = System.currentTimeMillis(),
-    val totalConsumers: Int = 0,
+    @ColumnInfo(name = "total_consumers")
+    val totalConsumers: Int,
+    @ColumnInfo(name = "processed_count")
     val processedCount: Int = 0
 ) {
+    val displayName: String
+        get() = fileName
     val progress: Float
         get() = if (totalConsumers > 0) processedCount.toFloat() / totalConsumers else 0f
 }

@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roninsoulkh.mappingop.data.parser.ExcelParser
@@ -23,12 +22,16 @@ import com.roninsoulkh.mappingop.ui.screens.*
 import com.roninsoulkh.mappingop.domain.models.WorkResult
 import com.roninsoulkh.mappingop.domain.models.Worksheet
 import com.roninsoulkh.mappingop.ui.theme.MappingOPTheme
-import com.roninsoulkh.mappingop.data.repository.AppDataRepository
+import com.roninsoulkh.mappingop.data.repository.AppRepository
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.io.InputStream
+import kotlinx.coroutines.async
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
-    private val repository = AppDataRepository()
+    private val repository by lazy { AppRepository(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,18 +50,18 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppNavigation(repository: AppDataRepository) {
-    // Состояние навигации
+fun AppNavigation(repository: AppRepository) {
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Worksheets) }
     var selectedWorksheetId by remember { mutableStateOf<String?>(null) }
     var selectedConsumer by remember { mutableStateOf<Consumer?>(null) }
 
-    // ДЛЯ Toast сообщений
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var showSuccessToast by remember { mutableStateOf(false) }
     var successMessage by remember { mutableStateOf("") }
+    var showErrorToast by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
 
-    // Показываем Toast если нужно
     LaunchedEffect(showSuccessToast) {
         if (showSuccessToast) {
             android.widget.Toast.makeText(context, successMessage, android.widget.Toast.LENGTH_SHORT).show()
@@ -66,26 +69,39 @@ fun AppNavigation(repository: AppDataRepository) {
         }
     }
 
-    // Получаем данные - ПРОСТОЙ ВАРИАНТ
-    var worksheets by remember {
-        mutableStateOf(repository.getAllWorksheets())
-    }
-
-    // Следим за изменениями экрана и обновляем данные
-    LaunchedEffect(currentScreen) {
-        if (currentScreen == AppScreen.Worksheets) {
-            worksheets = repository.getAllWorksheets()
+    LaunchedEffect(showErrorToast) {
+        if (showErrorToast) {
+            android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
+            showErrorToast = false
         }
     }
 
-    // Получаем потребителей выбранной ведомости
-    val worksheetConsumers = selectedWorksheetId?.let { worksheetId ->
-        remember(worksheetId) { repository.getConsumersByWorksheetId(worksheetId) }
-    } ?: emptyList()
+    var worksheets by remember { mutableStateOf<List<Worksheet>>(emptyList()) }
 
-    // Получаем результат отработки для выбранного потребителя
-    val workResultForSelectedConsumer = selectedConsumer?.let { consumer ->
-        remember(consumer.id) { repository.getWorkResultByConsumerId(consumer.id) }
+    LaunchedEffect(Unit) {
+        repository.getAllWorksheetsFlow().collect { worksheetsList ->
+        worksheets = worksheetsList
+        }
+    }
+
+    var worksheetConsumers by remember { mutableStateOf<List<Consumer>>(emptyList()) }
+
+    LaunchedEffect(selectedWorksheetId) {
+        selectedWorksheetId?.let { worksheetId ->
+            repository.getConsumersFlow(worksheetId).collect { consumers ->
+                worksheetConsumers = consumers
+            }
+        } ?: run {
+            worksheetConsumers = emptyList()
+        }
+    }
+
+    var workResultForSelectedConsumer by remember { mutableStateOf<WorkResult?>(null) }
+
+    LaunchedEffect(selectedConsumer) {
+        workResultForSelectedConsumer = selectedConsumer?.let { consumer ->
+            repository.getWorkResultByConsumerId(consumer.id)
+        }
     }
 
     when (currentScreen) {
@@ -94,12 +110,18 @@ fun AppNavigation(repository: AppDataRepository) {
                 worksheets = worksheets,
                 onWorksheetClick = { worksheet ->
                     selectedWorksheetId = worksheet.id
+                    coroutineScope.launch {
+                        repository.getConsumersByWorksheetId(worksheet.id)
+                    }
                     currentScreen = AppScreen.ConsumerList
                 },
                 onAddWorksheet = {
                     currentScreen = AppScreen.ImportExcel
                 },
-                onBackClick = { /* Выход из приложения */ }
+                onBackClick = { /* Выход из приложения */ },
+                onViewResults = {  // НОВЫЙ ПАРАМЕТР
+                    currentScreen = AppScreen.WorkResults
+                }
             )
         }
 
@@ -138,16 +160,30 @@ fun AppNavigation(repository: AppDataRepository) {
                     consumer = selectedConsumer!!,
                     initialResult = workResultForSelectedConsumer,
                     onSave = { result ->
-                        repository.saveWorkResult(result)
-                        selectedConsumer = null
-                        currentScreen = AppScreen.ConsumerList
+                        val consumerToSave = selectedConsumer
+                        if (consumerToSave != null) {
+                            coroutineScope.launch {
+                                try {
+                                    repository.saveWorkResult(consumerToSave.id, result)
 
-                        // Показываем Toast через состояние
-                        successMessage = "Дані збережено"
-                        showSuccessToast = true
-
-                        // Обновляем список ведомостей
-                        worksheets = repository.getAllWorksheets()
+                                    withContext(Dispatchers.Main) {
+                                        selectedConsumer = null
+                                        currentScreen = AppScreen.ConsumerList
+                                        successMessage = "✅ Дані збережено успішно!"
+                                        showSuccessToast = true
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        errorMessage = "❌ Помилка збереження: ${e.message}"
+                                        showErrorToast = true
+                                    }
+                                    e.printStackTrace()
+                                }
+                            }
+                        } else {
+                            errorMessage = "❌ Помилка: споживач не знайдений"
+                            showErrorToast = true
+                        }
                     },
                     onCancel = {
                         currentScreen = AppScreen.ConsumerDetail
@@ -161,12 +197,16 @@ fun AppNavigation(repository: AppDataRepository) {
                 repository = repository,
                 context = context,
                 onImportComplete = {
-                    // После импорта возвращаемся к списку ведомостей
                     currentScreen = AppScreen.Worksheets
-
-                    // ОБНОВЛЯЕМ данные ведомостей
-                    worksheets = repository.getAllWorksheets()
                 },
+                onBackClick = {
+                    currentScreen = AppScreen.Worksheets
+                }
+            )
+        }
+
+        AppScreen.WorkResults -> {
+            WorkResultsScreen(
                 onBackClick = {
                     currentScreen = AppScreen.Worksheets
                 }
@@ -178,7 +218,7 @@ fun AppNavigation(repository: AppDataRepository) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportExcelScreen(
-    repository: AppDataRepository,
+    repository: AppRepository,
     context: android.content.Context,
     onImportComplete: () -> Unit,
     onBackClick: () -> Unit
@@ -186,7 +226,8 @@ fun ImportExcelScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Функция для получения имени файла
+    val coroutineScope = rememberCoroutineScope()
+
     fun getFileName(uri: Uri): String {
         var fileName = ""
         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -200,7 +241,6 @@ fun ImportExcelScreen(
         return fileName.ifEmpty { uri.path?.substringAfterLast('/') ?: "Невідомий файл" }
     }
 
-    // Лончер для выбора файла
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
@@ -208,41 +248,50 @@ fun ImportExcelScreen(
                 isLoading = true
                 errorMessage = null
 
-                kotlin.runCatching {
-                    context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                        val parser = ExcelParser()
-                        val fileName = getFileName(fileUri)
-                        val worksheetId = "worksheet_${System.currentTimeMillis()}_${fileName.hashCode()}"
+                coroutineScope.launch {
+                    kotlin.runCatching {
+                        context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
+                            val parser = ExcelParser()
+                            val fileName = getFileName(fileUri)
 
-                        val parsedConsumers = parser.parseWorkbook(inputStream, worksheetId)
+                            // ГЕНЕРИРУЕМ worksheetId ОДИН РАЗ
+                            val worksheetId = "worksheet_${System.currentTimeMillis()}_${fileName.hashCode()}"
 
-                        if (parsedConsumers.isEmpty()) {
-                            errorMessage = "Файл не містить даних споживачів"
+                            println("📱 MainActivity: начат импорт, fileName=$fileName, worksheetId=$worksheetId")
+
+                            val parsedConsumers = parser.parseWorkbook(inputStream, worksheetId)
+
+                            println("📱 MainActivity: спарсено ${parsedConsumers.size} потребителей")
+
+                            if (parsedConsumers.isEmpty()) {
+                                errorMessage = "Файл не містить даних споживачів"
+                                isLoading = false
+                            } else {
+                                // Сохраняем в базу
+                                repository.addWorksheet(fileName, parsedConsumers)
+
+                                // ПРОВЕРКА: получаем данные обратно из базы
+                                val savedConsumers = repository.getConsumersByWorksheetId(worksheetId)
+                                println("📱 MainActivity: после сохранения, в базе ${savedConsumers.size} потребителей")
+
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "✅ Завантажено ${parsedConsumers.size} споживачів (в базе: ${savedConsumers.size})",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+
+                                isLoading = false
+                                onImportComplete()
+                            }
+                        } ?: run {
+                            errorMessage = "Не вдалося відкрити файл"
                             isLoading = false
-                        } else {
-                            // Сохраняем в репозиторий
-                            repository.addWorksheet(fileName, parsedConsumers)
-
-                            // Показываем Toast
-                            android.widget.Toast.makeText(
-                                context,
-                                "✅ Завантажено ${parsedConsumers.size} споживачів",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-
-                            isLoading = false
-
-                            // Возвращаемся к списку ведомостей
-                            onImportComplete()
                         }
-                    } ?: run {
-                        errorMessage = "Не вдалося відкрити файл"
+                    }.onFailure { e ->
+                        errorMessage = "Помилка обробки файлу: ${e.message}"
+                        e.printStackTrace()
                         isLoading = false
                     }
-                }.onFailure { e ->
-                    errorMessage = "Помилка обробки файлу: ${e.message}"
-                    e.printStackTrace()
-                    isLoading = false
                 }
             }
         }
@@ -309,24 +358,41 @@ fun ImportExcelScreen(
                     Text("📁 Вибрати Excel файл")
                 }
 
-                // КНОПКА ДЛЯ ПРОВЕРКИ
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = {
-                        // Проверяем сколько ведомостей в репозитории
-                        val count = repository.getAllWorksheets().size
-                        val info = if (count > 0) {
-                            "✅ В репозитории $count ведомость(ей)"
-                        } else {
-                            "❌ В репозитории 0 ведомостей"
-                        }
+                        // Запускаем корутину для вызова suspend-функции
+                        coroutineScope.launch {
+                            try {
+                                // getAllWorksheets() - suspend функция, требует корутины
+                                val count = repository.getAllWorksheets().size
 
-                        android.widget.Toast.makeText(
-                            context,
-                            info,
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                                val info = if (count > 0) {
+                                    "✅ В репозитории $count ведомость(ей) (СОХРАНЯЕТСЯ НА ДИСК!)"
+                                } else {
+                                    "❌ В репозитории 0 ведомостей"
+                                }
+
+                                // Toast нужно показывать в основном потоке (UI)
+                                withContext(Dispatchers.Main) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        info,
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            } catch (e: Exception) {
+                                // Обработка ошибок
+                                withContext(Dispatchers.Main) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "❌ Ошибка проверки: ${e.message}",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(0.8f),
                     colors = ButtonDefaults.buttonColors(
@@ -335,7 +401,7 @@ fun ImportExcelScreen(
                 ) {
                     Icon(Icons.Filled.Info, null, Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("🔍 Проверить репозиторий")
+                    Text("🔍 Проверить сохранение")
                 }
 
                 errorMessage?.let { message ->
@@ -350,11 +416,11 @@ fun ImportExcelScreen(
     }
 }
 
-// Перечисление экранов приложения
 sealed class AppScreen {
     object Worksheets : AppScreen()
     object ConsumerList : AppScreen()
     object ConsumerDetail : AppScreen()
     object ProcessConsumer : AppScreen()
     object ImportExcel : AppScreen()
+    object WorkResults : AppScreen()
 }

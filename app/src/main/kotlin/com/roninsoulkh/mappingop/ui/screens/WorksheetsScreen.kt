@@ -23,7 +23,8 @@ fun WorksheetsScreen(
     worksheets: List<Worksheet>,
     onWorksheetClick: (Worksheet) -> Unit,
     onAddWorksheet: () -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onViewResults: () -> Unit  // НОВЫЙ ПАРАМЕТР
 ) {
     // ДОБАВЛЕННЫЙ КОД ДЛЯ ОТЛАДКИ
     val context = LocalContext.current
@@ -69,12 +70,27 @@ fun WorksheetsScreen(
                 }
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddWorksheet,
-                containerColor = MaterialTheme.colorScheme.primary
+        floatingActionButton = {  // ИЗМЕНЕНО - теперь 2 кнопки
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Filled.Add, "Додати ведомость")
+                // Кнопка просмотра результатов
+                FloatingActionButton(
+                    onClick = onViewResults,
+                    modifier = Modifier.size(48.dp),
+                    containerColor = MaterialTheme.colorScheme.secondary
+                ) {
+                    Icon(Icons.Filled.ListAlt, "Результаты")
+                }
+
+                // Кнопка добавления ведомости
+                FloatingActionButton(
+                    onClick = onAddWorksheet,
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Filled.Add, "Додати ведомость")
+                }
             }
         }
     ) { paddingValues ->

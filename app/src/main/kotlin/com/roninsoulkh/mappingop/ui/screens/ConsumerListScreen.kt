@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ArrowBack // ДОБАВЛЕН ИМПОРТ
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,12 +26,21 @@ fun ConsumerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ведомость потребителей") },
+                title = {
+                    Column {
+                        Text("👥 Список споживачів")
+                        Text(
+                            text = "Всього: ${consumers.size} | Опрацьовано: ${consumers.count { it.isProcessed }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = "Назад"
+                            imageVector = Icons.Filled.ArrowBack, // ИСПРАВЛЕНО
+                            contentDescription = "Назад до ведомостей"
                         )
                     }
                 }
