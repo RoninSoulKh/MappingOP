@@ -51,6 +51,18 @@ The project has been updated to follow **Clean Architecture** principles to ensu
 
 ---
 
+## 🧩 Business Logic (Use Cases)
+
+To maintain a clean separation between the UI and Data layers, the project implements a **Domain-driven** approach. Key business operations are encapsulated in UseCases:
+
+* **`ImportExcelUseCase`**: Handles complex logic for parsing `.xlsx` files, validating consumer data, and mapping raw rows to Domain Entities.
+* **`GetWorksheetsUseCase`**: Manages data flow from the Room database, providing the UI with sorted and filtered lists of tasks.
+* **`SyncDataUseCase`** *(In Progress)*: Will handle the conflict resolution between local storage and the remote server.
+
+> **Why this matters?** This approach makes the code 100% testable and independent of the UI framework.
+
+---
+
 ## ✨ Key Features / Возможности (Updated)
 
 ### ✅ Implemented / Реализовано
