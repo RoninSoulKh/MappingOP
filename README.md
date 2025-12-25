@@ -67,7 +67,7 @@ The project is built using modern Android development practices (2024/2025 stand
     ```
 2.  Open in **Android Studio** (Ladybug or newer recommended).
 3.  Sync Gradle project.
-4.  Run on Emulator (Android 10+) or Physical Device.
+4.  Run on Emulator (Android 13+) or Physical Device.
 
 ---
 
