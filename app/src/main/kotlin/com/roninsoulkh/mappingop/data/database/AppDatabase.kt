@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Database(
     entities = [Worksheet::class, Consumer::class, WorkResult::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 // 👇 ВОТ ТУТ БЫЛА ОШИБКА. Мы добавили Converters::class в список

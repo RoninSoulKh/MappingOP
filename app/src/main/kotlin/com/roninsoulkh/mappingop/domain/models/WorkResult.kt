@@ -3,7 +3,6 @@ package com.roninsoulkh.mappingop.domain.models
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ColumnInfo
-import androidx.room.TypeConverters
 import java.util.UUID
 
 @Entity(tableName = "workresult")
@@ -40,6 +39,10 @@ data class WorkResult(
     // Комментарий
     @ColumnInfo(name = "comment")
     val comment: String? = null,
+
+    // 👇 ВОТ ОНО - НОВОЕ ПОЛЕ
+    @ColumnInfo(name = "photos")
+    val photos: List<String> = emptyList(),
 
     // Дата отработки
     @ColumnInfo(name = "processed_at")

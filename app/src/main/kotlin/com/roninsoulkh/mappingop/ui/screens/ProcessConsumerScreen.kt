@@ -1,7 +1,19 @@
 package com.roninsoulkh.mappingop.ui.screens
 
+import android.Manifest
+import android.content.Context
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -10,10 +22,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import coil.compose.rememberAsyncImagePainter
 import com.roninsoulkh.mappingop.domain.models.*
+import com.roninsoulkh.mappingop.utils.openMediaFile // ВАЖНО: Импорт для открытия файлов
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,51 +46,86 @@ fun ProcessConsumerScreen(
     onSave: (WorkResult) -> Unit,
     onCancel: () -> Unit
 ) {
-    // Состояние формы
+    val context = LocalContext.current
+    val scrollState = rememberScrollState()
+
     var meterReading by remember { mutableStateOf(initialResult?.meterReading?.toString() ?: "") }
     var newPhone by remember { mutableStateOf(initialResult?.newPhone ?: "") }
     var comment by remember { mutableStateOf(initialResult?.comment ?: "") }
 
-    // Состояния для выпадающих списков
-    var selectedBuildingCondition by remember {
-        mutableStateOf(initialResult?.buildingCondition ?: BuildingCondition.UNKNOWN)
-    }
-    var selectedConsumerType by remember {
-        mutableStateOf(initialResult?.consumerType)
-    }
-    var selectedWorkType by remember {
-        mutableStateOf(initialResult?.workType)
+    val photoPaths = remember { mutableStateListOf<String>() }
+
+    LaunchedEffect(initialResult) {
+        if (initialResult != null && photoPaths.isEmpty()) {
+            photoPaths.addAll(initialResult.photos)
+        }
     }
 
-    // Состояния для отображения выпадающих списков
+    var selectedBuildingCondition by remember { mutableStateOf(initialResult?.buildingCondition ?: BuildingCondition.UNKNOWN) }
+    var selectedConsumerType by remember { mutableStateOf(initialResult?.consumerType) }
+    var selectedWorkType by remember { mutableStateOf(initialResult?.workType) }
+
     var showBuildingConditionDropdown by remember { mutableStateOf(false) }
     var showConsumerTypeDropdown by remember { mutableStateOf(false) }
     var showWorkTypeDropdown by remember { mutableStateOf(false) }
+    var showMediaSourceDialog by remember { mutableStateOf(false) }
 
-    val scrollState = rememberScrollState()
+    var tempUri by remember { mutableStateOf<Uri?>(null) }
+    var isVideoMode by remember { mutableStateOf(false) }
+    var currentPhotoPath by remember { mutableStateOf<String?>(null) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            val savedFile = copyUriToInternalStorage(context, it)
+            savedFile?.let { file -> photoPaths.add(file.absolutePath) }
+        }
+    }
+
+    val cameraPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && currentPhotoPath != null) {
+            photoPaths.add(currentPhotoPath!!)
+        }
+    }
+
+    val cameraVideoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { success ->
+        if (success && currentPhotoPath != null) {
+            photoPaths.add(currentPhotoPath!!)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+        if (cameraGranted) {
+            val (uri, path) = createMediaFile(context, isVideoMode)
+            currentPhotoPath = path
+            if (isVideoMode) {
+                cameraVideoLauncher.launch(uri)
+            } else {
+                cameraPhotoLauncher.launch(uri)
+            }
+        } else {
+            Toast.makeText(context, "Потрібен дозвіл на камеру", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Опрацьовано: ОР ${consumer.orNumber}") },
                 navigationIcon = {
-                    IconButton(onClick = onCancel) {
-                        Icon(Icons.Filled.ArrowBack, "Назад")
-                    }
+                    IconButton(onClick = onCancel) { Icon(Icons.Filled.ArrowBack, "Назад") }
                 }
             )
         },
         bottomBar = {
             BottomAppBar {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    TextButton(onClick = onCancel) {
-                        Text("Скасувати")
-                    }
+                    TextButton(onClick = onCancel) { Text("Скасувати") }
 
                     Button(
                         onClick = {
@@ -76,11 +134,11 @@ fun ProcessConsumerScreen(
                                 worksheetId = consumer.worksheetId,
                                 meterReading = meterReading.toDoubleOrNull(),
                                 newPhone = newPhone.ifEmpty { null },
-                                buildingCondition = if (selectedBuildingCondition != BuildingCondition.UNKNOWN)
-                                    selectedBuildingCondition else null,
+                                buildingCondition = if (selectedBuildingCondition != BuildingCondition.UNKNOWN) selectedBuildingCondition else null,
                                 consumerType = selectedConsumerType,
                                 workType = selectedWorkType,
-                                comment = comment.ifEmpty { null }
+                                comment = comment.ifEmpty { null },
+                                photos = photoPaths.toList()
                             )
                             onSave(result)
                         }
@@ -101,135 +159,161 @@ fun ProcessConsumerScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Информация о потребителе
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Інформація про споживача",
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Інформація про споживача", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp)
                     Text("ОР №${consumer.orNumber}", fontSize = 14.sp)
                     Text(consumer.shortAddress, fontSize = 12.sp)
                     Text(consumer.name, fontSize = 12.sp)
                 }
             }
 
-            // 1. Показатели счётчика
             OutlinedTextField(
                 value = meterReading,
                 onValueChange = { meterReading = it },
                 label = { Text("Показники лічильника") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                leadingIcon = { Icon(Icons.Filled.Speed, null) },
-                placeholder = { Text("Введіть поточні показники") },
-                singleLine = true
+                leadingIcon = { Icon(Icons.Filled.Speed, null) }
             )
 
-            // 2. Номер телефона (новый)
             OutlinedTextField(
                 value = newPhone,
                 onValueChange = { newPhone = it },
                 label = { Text("Новий номер телефону") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                leadingIcon = { Icon(Icons.Filled.Phone, null) },
-                placeholder = { Text("+380XXXXXXXXX") },
-                singleLine = true
+                leadingIcon = { Icon(Icons.Filled.Phone, null) }
             )
 
-            // 3. Состояние здания (выпадающий список)
             OutlinedTextField(
                 value = getBuildingConditionText(selectedBuildingCondition),
                 onValueChange = { },
                 label = { Text("Стан будівлі") },
                 modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
-                trailingIcon = {
-                    IconButton(onClick = { showBuildingConditionDropdown = true }) {
-                        Icon(Icons.Filled.ArrowDropDown, null)
-                    }
-                },
-                placeholder = { Text("Оберіть стан будівлі") }
+                trailingIcon = { IconButton(onClick = { showBuildingConditionDropdown = true }) { Icon(Icons.Filled.ArrowDropDown, null) } }
             )
 
-            // 4. Классификатор потребителя (выпадающий список)
             OutlinedTextField(
                 value = selectedConsumerType?.let { getConsumerTypeText(it) } ?: "",
                 onValueChange = { },
                 label = { Text("Класифікатор споживача") },
                 modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
-                trailingIcon = {
-                    IconButton(onClick = { showConsumerTypeDropdown = true }) {
-                        Icon(Icons.Filled.ArrowDropDown, null)
-                    }
-                },
-                placeholder = { Text("Оберіть класифікатор") }
+                trailingIcon = { IconButton(onClick = { showConsumerTypeDropdown = true }) { Icon(Icons.Filled.ArrowDropDown, null) } }
             )
 
-            // 5. Тип отработки (выпадающий список)
             OutlinedTextField(
                 value = selectedWorkType?.let { getWorkTypeText(it) } ?: "",
                 onValueChange = { },
                 label = { Text("Тип відпрацювання") },
                 modifier = Modifier.fillMaxWidth(),
                 readOnly = true,
-                trailingIcon = {
-                    IconButton(onClick = { showWorkTypeDropdown = true }) {
-                        Icon(Icons.Filled.ArrowDropDown, null)
-                    }
-                },
-                placeholder = { Text("Оберіть тип відпрацювання") }
+                trailingIcon = { IconButton(onClick = { showWorkTypeDropdown = true }) { Icon(Icons.Filled.ArrowDropDown, null) } }
             )
 
-            // 6. Комментарий
             OutlinedTextField(
                 value = comment,
                 onValueChange = { comment = it },
                 label = { Text("Коментар") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                leadingIcon = { Icon(Icons.Filled.Comment, null) },
-                placeholder = { Text("Додаткові зауваження...") },
-                singleLine = false,
-                maxLines = 4
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = { Icon(Icons.Filled.Comment, null) }
             )
 
-            // Подсказка
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
+            Text("Фото та Відео фіксація", style = MaterialTheme.typography.titleMedium)
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().height(100.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = "Не обов'язково заповнювати всі поля",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                item {
+                    Card(
+                        modifier = Modifier.size(100.dp).clickable { showMediaSourceDialog = true },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.AddAPhoto, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                Text("Додати", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                        }
+                    }
+                }
+
+                items(photoPaths) { path ->
+                    val isVideo = path.endsWith(".mp4", ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { openMediaFile(context, path) } // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ
+                    ) {
+                        if (isVideo) {
+                            Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.PlayCircle, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                            }
+                        } else {
+                            Image(
+                                painter = rememberAsyncImagePainter(model = File(path)),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { photoPaths.remove(path) },
+                            modifier = Modifier.align(Alignment.TopEnd).size(24.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), RoundedCornerShape(50))
+                        ) {
+                            Icon(Icons.Filled.Close, null, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Диалог выбора состояния здания
+    if (showMediaSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showMediaSourceDialog = false },
+            title = { Text("Додати медіа") },
+            text = { Text("Що ви хочете додати?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMediaSourceDialog = false
+                    isVideoMode = true
+                    permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                }) {
+                    Icon(Icons.Filled.Videocam, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Відео")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showMediaSourceDialog = false
+                        isVideoMode = false
+                        permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                    }) {
+                        Icon(Icons.Filled.PhotoCamera, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Фото")
+                    }
+                    TextButton(onClick = {
+                        showMediaSourceDialog = false
+                        galleryLauncher.launch("*/*")
+                    }) { Text("Галерея") }
+                }
+            }
+        )
+    }
+
     if (showBuildingConditionDropdown) {
         AlertDialog(
             onDismissRequest = { showBuildingConditionDropdown = false },
@@ -238,92 +322,34 @@ fun ProcessConsumerScreen(
                 Column {
                     BuildingCondition.values().filter { it != BuildingCondition.UNKNOWN }.forEach { condition ->
                         ElevatedButton(
-                            onClick = {
-                                selectedBuildingCondition = condition
-                                showBuildingConditionDropdown = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.elevatedButtonColors(
-                                containerColor = if (selectedBuildingCondition == condition)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Text(getBuildingConditionText(condition))
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Кнопка "Не вибрано"
-                    OutlinedButton(
-                        onClick = {
-                            selectedBuildingCondition = BuildingCondition.UNKNOWN
-                            showBuildingConditionDropdown = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Не вибрано")
+                            onClick = { selectedBuildingCondition = condition; showBuildingConditionDropdown = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(getBuildingConditionText(condition)) }
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showBuildingConditionDropdown = false }) {
-                    Text("Закрити")
-                }
-            }
+            confirmButton = {}
         )
     }
 
-    // Диалог выбора классификатора потребителя
     if (showConsumerTypeDropdown) {
         AlertDialog(
             onDismissRequest = { showConsumerTypeDropdown = false },
-            title = { Text("Класифікатор споживача") },
+            title = { Text("Класифікатор") },
             text = {
                 Column {
                     ConsumerType.values().forEach { type ->
                         ElevatedButton(
-                            onClick = {
-                                selectedConsumerType = type
-                                showConsumerTypeDropdown = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.elevatedButtonColors(
-                                containerColor = if (selectedConsumerType == type)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Text(getConsumerTypeText(type))
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Кнопка "Не вибрано"
-                    OutlinedButton(
-                        onClick = {
-                            selectedConsumerType = null
-                            showConsumerTypeDropdown = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Не вибрано")
+                            onClick = { selectedConsumerType = type; showConsumerTypeDropdown = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(getConsumerTypeText(type)) }
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showConsumerTypeDropdown = false }) {
-                    Text("Закрити")
-                }
-            }
+            confirmButton = {}
         )
     }
 
-    // Диалог выбора типа отработки
     if (showWorkTypeDropdown) {
         AlertDialog(
             onDismissRequest = { showWorkTypeDropdown = false },
@@ -332,46 +358,48 @@ fun ProcessConsumerScreen(
                 Column {
                     WorkType.values().forEach { type ->
                         ElevatedButton(
-                            onClick = {
-                                selectedWorkType = type
-                                showWorkTypeDropdown = false
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.elevatedButtonColors(
-                                containerColor = if (selectedWorkType == type)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Text(getWorkTypeText(type))
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Кнопка "Не вибрано"
-                    OutlinedButton(
-                        onClick = {
-                            selectedWorkType = null
-                            showWorkTypeDropdown = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Не вибрано")
+                            onClick = { selectedWorkType = type; showWorkTypeDropdown = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(getWorkTypeText(type)) }
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showWorkTypeDropdown = false }) {
-                    Text("Закрити")
-                }
-            }
+            confirmButton = {}
         )
     }
 }
 
-// Функции для отображения текста
+fun createMediaFile(context: Context, isVideo: Boolean): Pair<Uri, String> {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val prefix = if (isVideo) "VID_" else "IMG_"
+    val suffix = if (isVideo) ".mp4" else ".jpg"
+    val storageDir = context.getExternalFilesDir("my_images")
+    val file = File.createTempFile(prefix + timeStamp + "_", suffix, storageDir)
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.provider",
+        file
+    )
+    return Pair(uri, file.absolutePath)
+}
+
+fun copyUriToInternalStorage(context: Context, uri: Uri): File? {
+    val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val type = context.contentResolver.getType(uri)
+    val isVideo = type?.startsWith("video/") == true
+    val suffix = if (isVideo) ".mp4" else ".jpg"
+
+    val file = File(context.filesDir, "MEDIA_${timeStamp}$suffix")
+    val outputStream = FileOutputStream(file)
+
+    inputStream.use { input -> outputStream.use { output -> input.copyTo(output) } }
+    return file
+}
+
+fun getFileFromUri(context: Context, uri: Uri): File? { return null }
+
 private fun getBuildingConditionText(condition: BuildingCondition): String {
     return when (condition) {
         BuildingCondition.LIVING -> "Мешкають"
