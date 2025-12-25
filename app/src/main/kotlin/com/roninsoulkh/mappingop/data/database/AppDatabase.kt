@@ -2,15 +2,17 @@ package com.roninsoulkh.mappingop.data.database
 
 import android.content.Context
 import androidx.room.*
+import com.roninsoulkh.mappingop.Converters // <--- ВАЖНО: Добавили импорт твоего конвертера
 import com.roninsoulkh.mappingop.domain.models.*
 import kotlinx.coroutines.flow.Flow
 
 @Database(
     entities = [Worksheet::class, Consumer::class, WorkResult::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
-@TypeConverters(WorkResultConverters::class)
+// 👇 ВОТ ТУТ БЫЛА ОШИБКА. Мы добавили Converters::class в список
+@TypeConverters(WorkResultConverters::class, Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun worksheetDao(): WorksheetDao
     abstract fun consumerDao(): ConsumerDao
@@ -53,8 +55,8 @@ interface WorksheetDao {
     @Query("SELECT * FROM worksheet WHERE id = :id")
     suspend fun getWorksheetById(id: String): Worksheet?
 
-    @Query("DELETE FROM worksheet WHERE id = :id")
-    suspend fun deleteWorksheet(id: String)
+    @Delete
+    suspend fun deleteWorksheet(worksheet: Worksheet)
 
     @Query("DELETE FROM worksheet")
     suspend fun deleteAllWorksheets()
@@ -71,7 +73,7 @@ interface ConsumerDao {
     @Update
     suspend fun updateConsumer(consumer: Consumer)
 
-    @Query("SELECT * FROM consumer WHERE worksheet_id = :worksheetId ORDER BY or_Number")
+    @Query("SELECT * FROM consumer WHERE worksheet_id = :worksheetId ORDER BY or_number")
     fun getConsumersByWorksheetId(worksheetId: String): Flow<List<Consumer>>
 
     @Query("SELECT * FROM consumer WHERE id = :id")

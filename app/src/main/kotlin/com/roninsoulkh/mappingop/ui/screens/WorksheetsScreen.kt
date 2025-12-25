@@ -9,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,192 +23,65 @@ fun WorksheetsScreen(
     onWorksheetClick: (Worksheet) -> Unit,
     onAddWorksheet: () -> Unit,
     onBackClick: () -> Unit,
-    onViewResults: () -> Unit  // НОВЫЙ ПАРАМЕТР
+    onViewResults: () -> Unit,
+    onDeleteWorksheet: (Worksheet) -> Unit // <--- НОВЫЙ ПАРАМЕТР
 ) {
-    // ДОБАВЛЕННЫЙ КОД ДЛЯ ОТЛАДКИ
-    val context = LocalContext.current
-    LaunchedEffect(worksheets) {
-        if (worksheets.isNotEmpty()) {
-            android.widget.Toast.makeText(
-                context,
-                "📱 WorksheetsScreen: ${worksheets.size} ведомостей",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    // Также покажем простое текстовое сообщение в UI
-    var showDebugInfo by remember { mutableStateOf(false) }
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📋 Ведомости")
+                        Text("📋 Відомості")
                         if (worksheets.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(8.dp))
-                            Badge {
-                                Text(worksheets.size.toString())
-                            }
+                            Badge { Text(worksheets.size.toString()) }
                         }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Filled.ArrowBack, "Назад")
-                    }
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, "Назад") }
                 },
                 actions = {
-                    IconButton(onClick = { showDebugInfo = !showDebugInfo }) {
-                        Icon(Icons.Filled.Info, "Информация")
-                    }
-                    IconButton(onClick = onAddWorksheet) {
-                        Icon(Icons.Filled.Add, "Додати ведомость")
-                    }
+                    IconButton(onClick = onAddWorksheet) { Icon(Icons.Filled.Add, "Додати") }
                 }
             )
         },
-        floatingActionButton = {  // ИЗМЕНЕНО - теперь 2 кнопки
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onViewResults,
+                containerColor = MaterialTheme.colorScheme.secondary
             ) {
-                // Кнопка просмотра результатов
-                FloatingActionButton(
-                    onClick = onViewResults,
-                    modifier = Modifier.size(48.dp),
-                    containerColor = MaterialTheme.colorScheme.secondary
-                ) {
-                    Icon(Icons.Filled.ListAlt, "Результаты")
-                }
-
-                // Кнопка добавления ведомости
-                FloatingActionButton(
-                    onClick = onAddWorksheet,
-                    containerColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(Icons.Filled.Add, "Додати ведомость")
-                }
+                Icon(Icons.Filled.ListAlt, "Результати")
             }
         }
     ) { paddingValues ->
-        // Отладочная информация
-        if (showDebugInfo) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "📊 Отладка:",
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("Количество ведомостей: ${worksheets.size}")
-                    if (worksheets.isNotEmpty()) {
-                        Text("Первая ведомость: ${worksheets[0].fileName}")
-                        Text("Потребителей: ${worksheets[0].totalConsumers}")
-                    }
-                }
-            }
-        }
-
         if (worksheets.isEmpty()) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Filled.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Немає ведомостей",
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Натисніть + щоб додати першу ведомость",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Кнопка для принудительной проверки
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        android.widget.Toast.makeText(
-                            context,
-                            "Проверка: worksheets size = ${worksheets.size}",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    }
-                ) {
-                    Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Проверить данные")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.FolderOpen, null, Modifier.size(64.dp))
+                    Text("Немає відомостей. Додайте файл.")
                 }
             }
         } else {
-            Column {
-                // Информационная панель
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+                items(worksheets) { worksheet ->
+                    WorksheetCard(
+                        worksheet = worksheet,
+                        onClick = { onWorksheetClick(worksheet) },
+                        onDelete = { onDeleteWorksheet(worksheet) } // Передаем удаление
                     )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "📁 Всего ведомостей: ${worksheets.size}",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Button(
-                            onClick = {
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Первая ведомость: ${worksheets[0].fileName}",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Text("Тест")
-                        }
-                    }
-                }
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(worksheets) { worksheet ->
-                        WorksheetCard(
-                            worksheet = worksheet,
-                            onClick = { onWorksheetClick(worksheet) }
-                        )
-                    }
                 }
             }
         }
@@ -219,81 +91,66 @@ fun WorksheetsScreen(
 @Composable
 fun WorksheetCard(
     worksheet: Worksheet,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-
     val dateFormatter = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
-    val formattedDate = remember(worksheet.importDate) {
-        dateFormatter.format(Date(worksheet.importDate))
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    // Диалог подтверждения удаления
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Видалити відомість?") },
+            text = { Text("Ви впевнені? Всі споживачі з цієї відомості будуть видалені назавжди.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Видалити") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Скасувати") }
+            }
+        )
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        onClick = {
-            // Показываем Toast при нажатии
-            android.widget.Toast.makeText(
-                context,
-                "Выбрана: ${worksheet.fileName}",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
-            onClick()
-        }
+        onClick = onClick
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(text = worksheet.displayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text(
-                        text = worksheet.displayName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = formattedDate,
+                        text = dateFormatter.format(Date(worksheet.importDate)),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                // Статус обработки
-                Badge(
-                    containerColor = if (worksheet.processedCount == worksheet.totalConsumers) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.secondary
-                    }
-                ) {
-                    Text("${worksheet.processedCount}/${worksheet.totalConsumers}")
+                // Кнопка-корзина
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(Icons.Filled.Delete, "Видалити", tint = MaterialTheme.colorScheme.error)
                 }
             }
-
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Прогресс бар
             LinearProgressIndicator(
                 progress = worksheet.progress,
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(4.dp))
-
             Text(
-                text = if (worksheet.totalConsumers > 0) {
-                    "Оброблено ${(worksheet.progress * 100).toInt()}%"
-                } else {
-                    "Немає споживачів"
-                },
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Оброблено ${worksheet.processedCount} з ${worksheet.totalConsumers}",
+                fontSize = 12.sp
             )
         }
     }

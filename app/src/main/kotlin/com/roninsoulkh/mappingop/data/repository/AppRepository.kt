@@ -18,24 +18,24 @@ class AppRepository(context: Context) {
         return consumerDao.getConsumersByWorksheetId(worksheetId)
     }
 
-    // 2. СИНХРОННЫЕ МЕТОДЫ (возвращают List, а не Flow)
+    // 2. СИНХРОННЫЕ МЕТОДЫ
     suspend fun getAllWorksheets(): List<Worksheet> {
-        return worksheetDao.getAllWorksheetsSync()  // Изменено!
+        return worksheetDao.getAllWorksheetsSync()
     }
 
     suspend fun getConsumersByWorksheetId(worksheetId: String): List<Consumer> {
-        return consumerDao.getConsumersByWorksheetIdSync(worksheetId)  // Изменено!
+        return consumerDao.getConsumersByWorksheetIdSync(worksheetId)
+    }
+
+    suspend fun getWorkResultByConsumerId(consumerId: String): WorkResult? {
+        return workResultDao.getWorkResultByConsumerId(consumerId)
     }
 
     // 3. ОСНОВНЫЕ ОПЕРАЦИИ
     suspend fun addWorksheet(fileName: String, consumers: List<Consumer>) {
-        // 1. Получаем worksheetId из ПЕРВОГО потребителя
         val worksheetId = consumers.firstOrNull()?.worksheetId
             ?: "worksheet_${System.currentTimeMillis()}_${fileName.hashCode()}"
 
-        println("🔍 AppRepository: добавляем ведомость, worksheetId=$worksheetId, потребителей=${consumers.size}")
-
-        // 2. Создаем Worksheet с ТЕМ ЖЕ worksheetId
         val worksheet = Worksheet(
             id = worksheetId,
             fileName = fileName,
@@ -44,16 +44,16 @@ class AppRepository(context: Context) {
             processedCount = 0
         )
 
-        // 3. Проверяем данные перед сохранением
-        consumers.forEachIndexed { index, consumer ->
-            println("🔍 Consumer $index: id=${consumer.id}, worksheetId=${consumer.worksheetId}, OR=${consumer.orNumber}")
-        }
-
         worksheetDao.insertWorksheet(worksheet)
         consumerDao.insertAllConsumers(consumers)
-
-        println("✅ AppRepository: ведомость сохранена, ID=$worksheetId")
     }
+
+    // --- НОВОЕ: Функция удаления ---
+    suspend fun deleteWorksheet(worksheet: Worksheet) {
+        worksheetDao.deleteWorksheet(worksheet)
+        // А потребители удалятся сами благодаря настройке в Consumer.kt
+    }
+    // ------------------------------
 
     suspend fun saveWorkResult(consumerId: String, result: WorkResult) {
         workResultDao.insertWorkResult(result)
@@ -62,7 +62,7 @@ class AppRepository(context: Context) {
     }
 
     private suspend fun updateWorksheetProgress(worksheetId: String) {
-        val consumers = getConsumersByWorksheetId(worksheetId)  // Используем исправленный метод
+        val consumers = getConsumersByWorksheetId(worksheetId)
         val processedCount = consumers.count { it.isProcessed }
 
         val worksheet = worksheetDao.getWorksheetById(worksheetId)
@@ -72,11 +72,6 @@ class AppRepository(context: Context) {
         }
     }
 
-    suspend fun getWorkResultByConsumerId(consumerId: String): WorkResult? {
-        return workResultDao.getWorkResultByConsumerId(consumerId)
-    }
-
-    // 4. ОЧИСТКА ДАННЫХ (новые методы)
     suspend fun clearAllData() {
         worksheetDao.deleteAllWorksheets()
         consumerDao.deleteAllConsumers()

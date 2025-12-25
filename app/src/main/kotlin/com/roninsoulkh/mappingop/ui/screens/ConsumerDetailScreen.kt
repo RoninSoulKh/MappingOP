@@ -6,31 +6,48 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roninsoulkh.mappingop.domain.models.Consumer
+import com.roninsoulkh.mappingop.domain.models.WorkResult
+import com.roninsoulkh.mappingop.domain.models.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConsumerDetailScreen(
     consumer: Consumer,
+    workResult: WorkResult?, // <--- НОВЫЙ ПАРАМЕТР: Результат работы (может быть null)
     onBackClick: () -> Unit,
     onProcessClick: () -> Unit
 ) {
+    // Состояние для показа диалога с результатами
+    var showResultDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Деталі споживача") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Назад"
-                        )
+                        Icon(Icons.Filled.ArrowBack, "Назад")
+                    }
+                },
+                actions = {
+                    // ПОКАЗЫВАЕМ ИКОНКУ ТОЛЬКО ЕСЛИ ЕСТЬ РЕЗУЛЬТАТ
+                    if (workResult != null) {
+                        IconButton(onClick = { showResultDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.Description, // Иконка листа/документа
+                                contentDescription = "Показати результат",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             )
@@ -43,14 +60,23 @@ fun ConsumerDetailScreen(
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Button(onClick = onProcessClick) {
+                    // Если уже обработано, меняем текст кнопки
+                    Button(
+                        onClick = onProcessClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (consumer.isProcessed)
+                                MaterialTheme.colorScheme.secondary
+                            else
+                                MaterialTheme.colorScheme.primary
+                        )
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.CheckCircle,
+                            imageVector = if (consumer.isProcessed) Icons.Filled.Edit else Icons.Filled.CheckCircle,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Опрацьовано")
+                        Text(if (consumer.isProcessed) "Редагувати" else "Опрацювати")
                     }
                 }
             }
@@ -70,7 +96,7 @@ fun ConsumerDetailScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 AssistChip(
-                    onClick = {},
+                    onClick = { if (workResult != null) showResultDialog = true },
                     label = {
                         Text(
                             if (consumer.isProcessed) "ОПРАЦЬОВАНО" else "НЕ ОПРАЦЬОВАНО",
@@ -83,11 +109,14 @@ fun ConsumerDetailScreen(
                         } else {
                             MaterialTheme.colorScheme.errorContainer
                         }
-                    )
+                    ),
+                    leadingIcon = {
+                        if (consumer.isProcessed) Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
+                    }
                 )
             }
 
-            // Основная информация - УДАЛИЛ "Коротка адреса"
+            // Основная информация
             InfoCard(title = "Номер ОР", value = consumer.orNumber, icon = Icons.Filled.Numbers)
             InfoCard(title = "Адреса", value = consumer.rawAddress, icon = Icons.Filled.Home)
             InfoCard(title = "Контрагент", value = consumer.name, icon = Icons.Filled.Person)
@@ -118,37 +147,51 @@ fun ConsumerDetailScreen(
                 )
             }
 
-            // Дополнительная информация
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+            // Дополнительная информация (скрыл лишнее, оставил ID для отладки если надо)
+            if (!consumer.isProcessed) {
+                Text(
+                    text = "Натисніть «Опрацювати» щоб внести показники",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp)
                 )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
+            }
+        }
+    }
+
+    // --- ДИАЛОГ С РЕЗУЛЬТАТАМИ ---
+    if (showResultDialog && workResult != null) {
+        AlertDialog(
+            onDismissRequest = { showResultDialog = false },
+            icon = { Icon(Icons.Filled.Description, null) },
+            title = { Text("Результат відпрацювання") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Дата
                     Text(
-                        text = "Додаткова інформація",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Text(
-                        text = "ID запису: ${consumer.id}",
+                        text = "Дата: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(workResult.processedAt))}",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = "ID ведомості: ${consumer.worksheetId}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Divider()
+
+                    // Данные
+                    ResultRow("Тип:", workResult.workType?.name ?: "-")
+                    ResultRow("Лічильник:", workResult.meterReading?.toString() ?: "-")
+                    if (!workResult.newPhone.isNullOrEmpty()) {
+                        ResultRow("Новий телефон:", workResult.newPhone)
+                    }
+                    if (!workResult.comment.isNullOrEmpty()) {
+                        ResultRow("Коментар:", workResult.comment)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showResultDialog = false }) {
+                    Text("Закрити")
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
-        }
+        )
     }
 }
 
@@ -190,5 +233,13 @@ fun InfoCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun ResultRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(value, fontSize = 14.sp)
     }
 }

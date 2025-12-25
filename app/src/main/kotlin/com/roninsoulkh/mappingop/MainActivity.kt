@@ -3,6 +3,7 @@ package com.roninsoulkh.mappingop
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler // <--- ВАЖНО: Для перехвата кнопки Назад
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.roninsoulkh.mappingop.data.parser.ExcelParser
 import com.roninsoulkh.mappingop.domain.models.Consumer
 import com.roninsoulkh.mappingop.ui.screens.*
@@ -26,8 +26,6 @@ import com.roninsoulkh.mappingop.data.repository.AppRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
-import java.io.InputStream
-import kotlinx.coroutines.async
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -76,29 +74,24 @@ fun AppNavigation(repository: AppRepository) {
         }
     }
 
+    // Данные ведомостей
     var worksheets by remember { mutableStateOf<List<Worksheet>>(emptyList()) }
-
     LaunchedEffect(Unit) {
-        repository.getAllWorksheetsFlow().collect { worksheetsList ->
-        worksheets = worksheetsList
-        }
+        repository.getAllWorksheetsFlow().collect { worksheets = it }
     }
 
+    // Данные потребителей выбранной ведомости
     var worksheetConsumers by remember { mutableStateOf<List<Consumer>>(emptyList()) }
-
     LaunchedEffect(selectedWorksheetId) {
         selectedWorksheetId?.let { worksheetId ->
-            repository.getConsumersFlow(worksheetId).collect { consumers ->
-                worksheetConsumers = consumers
-            }
-        } ?: run {
-            worksheetConsumers = emptyList()
-        }
+            repository.getConsumersFlow(worksheetId).collect { worksheetConsumers = it }
+        } ?: run { worksheetConsumers = emptyList() }
     }
 
+    // Результат работы по выбранному потребителю
     var workResultForSelectedConsumer by remember { mutableStateOf<WorkResult?>(null) }
-
-    LaunchedEffect(selectedConsumer) {
+    // Следим за изменениями selectedConsumer, чтобы подгрузить результат
+    LaunchedEffect(selectedConsumer, currentScreen) { // Добавил currentScreen в триггеры, чтобы обновлялось при возврате
         workResultForSelectedConsumer = selectedConsumer?.let { consumer ->
             repository.getWorkResultByConsumerId(consumer.id)
         }
@@ -106,26 +99,32 @@ fun AppNavigation(repository: AppRepository) {
 
     when (currentScreen) {
         AppScreen.Worksheets -> {
+            // На главном экране BackHandler не нужен (выход из приложения - стандартное поведение)
             WorksheetsScreen(
                 worksheets = worksheets,
                 onWorksheetClick = { worksheet ->
                     selectedWorksheetId = worksheet.id
-                    coroutineScope.launch {
-                        repository.getConsumersByWorksheetId(worksheet.id)
-                    }
                     currentScreen = AppScreen.ConsumerList
                 },
-                onAddWorksheet = {
-                    currentScreen = AppScreen.ImportExcel
-                },
-                onBackClick = { /* Выход из приложения */ },
-                onViewResults = {  // НОВЫЙ ПАРАМЕТР
-                    currentScreen = AppScreen.WorkResults
+                onAddWorksheet = { currentScreen = AppScreen.ImportExcel },
+                onBackClick = { /* Системный выход */ },
+                onViewResults = { currentScreen = AppScreen.WorkResults },
+                onDeleteWorksheet = { worksheet ->
+                    coroutineScope.launch {
+                        repository.deleteWorksheet(worksheet)
+                        android.widget.Toast.makeText(context, "Відомість видалено", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
         }
 
         AppScreen.ConsumerList -> {
+            // Если нажали Назад в списке -> идем к Ведомостям
+            BackHandler {
+                selectedWorksheetId = null
+                currentScreen = AppScreen.Worksheets
+            }
+
             ConsumerListScreen(
                 consumers = worksheetConsumers,
                 onConsumerClick = { consumer ->
@@ -140,9 +139,16 @@ fun AppNavigation(repository: AppRepository) {
         }
 
         AppScreen.ConsumerDetail -> {
+            // Если нажали Назад в деталях -> идем к Списку
+            BackHandler {
+                selectedConsumer = null
+                currentScreen = AppScreen.ConsumerList
+            }
+
             if (selectedConsumer != null) {
                 ConsumerDetailScreen(
                     consumer = selectedConsumer!!,
+                    workResult = workResultForSelectedConsumer, // <--- ПЕРЕДАЕМ РЕЗУЛЬТАТ СЮДА
                     onBackClick = {
                         selectedConsumer = null
                         currentScreen = AppScreen.ConsumerList
@@ -155,6 +161,9 @@ fun AppNavigation(repository: AppRepository) {
         }
 
         AppScreen.ProcessConsumer -> {
+            // Если нажали Назад при заполнении -> идем к Деталям (без сохранения)
+            BackHandler { currentScreen = AppScreen.ConsumerDetail }
+
             if (selectedConsumer != null) {
                 ProcessConsumerScreen(
                     consumer = selectedConsumer!!,
@@ -165,10 +174,10 @@ fun AppNavigation(repository: AppRepository) {
                             coroutineScope.launch {
                                 try {
                                     repository.saveWorkResult(consumerToSave.id, result)
-
                                     withContext(Dispatchers.Main) {
-                                        selectedConsumer = null
-                                        currentScreen = AppScreen.ConsumerList
+                                        // ВАЖНО: Обновляем результат вручную, чтобы он сразу появился при возврате
+                                        workResultForSelectedConsumer = result
+                                        currentScreen = AppScreen.ConsumerDetail // Возвращаемся в детали
                                         successMessage = "✅ Дані збережено успішно!"
                                         showSuccessToast = true
                                     }
@@ -193,23 +202,21 @@ fun AppNavigation(repository: AppRepository) {
         }
 
         AppScreen.ImportExcel -> {
+            BackHandler { currentScreen = AppScreen.Worksheets }
+
             ImportExcelScreen(
                 repository = repository,
                 context = context,
-                onImportComplete = {
-                    currentScreen = AppScreen.Worksheets
-                },
-                onBackClick = {
-                    currentScreen = AppScreen.Worksheets
-                }
+                onImportComplete = { currentScreen = AppScreen.Worksheets },
+                onBackClick = { currentScreen = AppScreen.Worksheets }
             )
         }
 
         AppScreen.WorkResults -> {
+            BackHandler { currentScreen = AppScreen.Worksheets }
+
             WorkResultsScreen(
-                onBackClick = {
-                    currentScreen = AppScreen.Worksheets
-                }
+                onBackClick = { currentScreen = AppScreen.Worksheets }
             )
         }
     }
@@ -225,21 +232,7 @@ fun ImportExcelScreen(
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
     val coroutineScope = rememberCoroutineScope()
-
-    fun getFileName(uri: Uri): String {
-        var fileName = ""
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val displayNameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (displayNameIndex != -1) {
-                    fileName = cursor.getString(displayNameIndex)
-                }
-            }
-        }
-        return fileName.ifEmpty { uri.path?.substringAfterLast('/') ?: "Невідомий файл" }
-    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -247,48 +240,26 @@ fun ImportExcelScreen(
             uri?.let { fileUri ->
                 isLoading = true
                 errorMessage = null
-
                 coroutineScope.launch {
                     kotlin.runCatching {
                         context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
                             val parser = ExcelParser()
-                            val fileName = getFileName(fileUri)
-
-                            // ГЕНЕРИРУЕМ worksheetId ОДИН РАЗ
+                            // Получаем имя файла (упрощенно)
+                            val fileName = fileUri.path?.substringAfterLast('/') ?: "imported_file.xlsx"
                             val worksheetId = "worksheet_${System.currentTimeMillis()}_${fileName.hashCode()}"
-
-                            println("📱 MainActivity: начат импорт, fileName=$fileName, worksheetId=$worksheetId")
-
                             val parsedConsumers = parser.parseWorkbook(inputStream, worksheetId)
-
-                            println("📱 MainActivity: спарсено ${parsedConsumers.size} потребителей")
 
                             if (parsedConsumers.isEmpty()) {
                                 errorMessage = "Файл не містить даних споживачів"
                                 isLoading = false
                             } else {
-                                // Сохраняем в базу
                                 repository.addWorksheet(fileName, parsedConsumers)
-
-                                // ПРОВЕРКА: получаем данные обратно из базы
-                                val savedConsumers = repository.getConsumersByWorksheetId(worksheetId)
-                                println("📱 MainActivity: после сохранения, в базе ${savedConsumers.size} потребителей")
-
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "✅ Завантажено ${parsedConsumers.size} споживачів (в базе: ${savedConsumers.size})",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
-
                                 isLoading = false
                                 onImportComplete()
                             }
-                        } ?: run {
-                            errorMessage = "Не вдалося відкрити файл"
-                            isLoading = false
-                        }
+                        } ?: run { errorMessage = "Не вдалося відкрити файл"; isLoading = false }
                     }.onFailure { e ->
-                        errorMessage = "Помилка обробки файлу: ${e.message}"
+                        errorMessage = "Помилка: ${e.message}"
                         e.printStackTrace()
                         isLoading = false
                     }
@@ -302,115 +273,26 @@ fun ImportExcelScreen(
             TopAppBar(
                 title = { Text("📁 Імпорт Excel") },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Filled.ArrowBack, "Назад")
-                    }
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, "Назад") }
                 }
             )
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             if (isLoading) {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Завантаження файлу...")
+                Text("Завантаження...", Modifier.padding(top = 16.dp))
             } else {
-                Icon(
-                    Icons.Filled.UploadFile,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "Оберіть файл Excel для імпорту",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Файл повинен містити колонки:\n" +
-                            "• Номер ОР\n• ПІБ\n• Телефон\n• Адреса\n• Заборгованість",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Button(
-                    onClick = {
-                        filePickerLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    },
-                    modifier = Modifier.fillMaxWidth(0.8f)
-                ) {
-                    Icon(Icons.Filled.FileOpen, null, Modifier.size(20.dp))
+                Button(onClick = { filePickerLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }) {
+                    Icon(Icons.Filled.UploadFile, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("📁 Вибрати Excel файл")
+                    Text("Оберіть файл Excel")
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = {
-                        // Запускаем корутину для вызова suspend-функции
-                        coroutineScope.launch {
-                            try {
-                                // getAllWorksheets() - suspend функция, требует корутины
-                                val count = repository.getAllWorksheets().size
-
-                                val info = if (count > 0) {
-                                    "✅ В репозитории $count ведомость(ей) (СОХРАНЯЕТСЯ НА ДИСК!)"
-                                } else {
-                                    "❌ В репозитории 0 ведомостей"
-                                }
-
-                                // Toast нужно показывать в основном потоке (UI)
-                                withContext(Dispatchers.Main) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        info,
-                                        android.widget.Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            } catch (e: Exception) {
-                                // Обработка ошибок
-                                withContext(Dispatchers.Main) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "❌ Ошибка проверки: ${e.message}",
-                                        android.widget.Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(0.8f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
-                    )
-                ) {
-                    Icon(Icons.Filled.Info, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("🔍 Проверить сохранение")
-                }
-
-                errorMessage?.let { message ->
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+                errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 16.dp)) }
             }
         }
     }
