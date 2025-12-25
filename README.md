@@ -3,80 +3,83 @@
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=android&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Active%20Dev-orange?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Clean%20Architecture-MVVM-blue?style=for-the-badge)
 
-**MappingOP** is a mobile application for automating the work of field teams working with consumers. It replaces paper worksheets with a digital system for route planning, meter reading, and data synchronization.
+**MappingOP** is a professional Android solution for field service automation. It digitizes paper workflows, enabling field teams to manage consumer data, sync routes via Excel, and process meter readings in real-time.
 
-> **MappingOP** — мобильное приложение для автоматизации работы выездных бригад для работы с потребителями. Оно заменяет бумажные ведомости цифровой системой для планирования маршрута, снятия показаний и синхронизации данных.
+> **MappingOP** — профессиональное Android-решение для автоматизации работы выездных бригад. Проект оцифровывает бумажные ведомости, позволяя командам управлять данными потребителей, импортировать маршруты через Excel и фиксировать показания в реальном времени.
 
 ---
 
 ## 🗺️ Roadmap / Дорожная Карта
 
-We are currently at **Stage 1 (Internal Architecture)**.
-Сейчас мы находимся на **Этапе 1 (Внутренняя архитектура)**.
+We have successfully completed the core architecture and moved to **Stage 2 (Logic & Data Processing)**.
+Мы успешно завершили создание ядра архитектуры и перешли к **Этапу 2 (Логика и обработка данных)**.
 
 ### English Version 🇺🇸
-![Roadmap En](assets/En.png)
+![Roadmap En](assets/Roadmap_En_V2.png)
 
 <details>
 <summary><b>Click to see Russian Version / Нажмите для просмотра версии на Русском 🇷🇺</b></summary>
 
-![Roadmap Ru](assets/Ru.png)
+![Roadmap Ru](assets/Roadmap_Ru_V2.png)
 </details>
+
+---
+
+## 🏗️ Architecture & Clean Code / Архитектура
+
+The project has been updated to follow **Clean Architecture** principles to ensure scalability:
+Проект был обновлен в соответствии с принципами **Clean Architecture** для обеспечения масштабируемости:
+
+* **Domain Layer:** Business logic, Models, and UseCases (Pure Kotlin).
+* **Data Layer:** Room persistence, Excel parsing (Apache POI), and Repository implementations.
+* **Presentation Layer:** State-driven UI with Jetpack Compose and ViewModels.
 
 ---
 
 ## 🛠 Tech Stack / Технологии
 
-The project is built using modern Android development practices (2024/2025 standards).
-
 | Category | Technology | Description |
 | :--- | :--- | :--- |
-| **Language** | Kotlin | 100% Kotlin codebase |
-| **UI** | Jetpack Compose | Material3 Design, Single Activity |
-| **Architecture** | MVVM | Model-View-ViewModel pattern |
-| **Database** | Room | Local SQLite database with Relations |
-| **Concurrency** | Coroutines & Flow | Asynchronous data handling |
-| **Files** | Apache POI | Reading/Parsing Excel (.xlsx) files |
-| **Navigation** | Compose Navigation | Type-safe navigation |
+| **Language** | Kotlin | Modern, safe, and expressive |
+| **UI Framework** | Jetpack Compose | Material3, Responsive UI |
+| **DI** | Koin / Manual DI | Dependency Injection for decoupling |
+| **Local DB** | Room | Complex relations and offline-first approach |
+| **File Engine** | Apache POI | Industrial-grade Excel (.xlsx) processing |
+| **Async** | Coroutines & Flow | Reactive data streams |
 
 ---
 
-## ✨ Key Features / Возможности
+## ✨ Key Features / Возможности (Updated)
 
-### ✅ Current (Implemented)
-* **Excel Parsing:** Importing control lists directly from `.xlsx` files.
-* **Local Database:** Storing worksheets and consumers offline using Room.
-* **Worksheets:** Viewing lists of consumers assigned to the controller.
-* **Results:** Recording meter readings and statuses (Processed/Refusal).
+### ✅ Implemented / Реализовано
+* **Deep Excel Parsing:** Robust mapping of complex Excel sheets to Domain models.
+* **Modular Architecture:** Clean separation of concerns (Data, Domain, App).
+* **Entity Mapping:** Seamless transformation between Database entities and UI models.
+* **Offline Storage:** Full Room DB integration for seamless work without internet.
 
-### 🚧 In Progress & Planned
-* **Map Integration:** Visualizing consumers on a map (OSM/Visicom).
-* **Server Sync:** REST API integration for downloading tasks and uploading reports.
-* **Admin Panel:** Web-interface for managing tasks (Backend side).
-* **Route Optimization:** GPS tracking and smart routing.
+### 🚧 In Progress / В разработке
+* **Complex UI States:** Developing detailed consumer views and input validation.
+* **Search & Filters:** Advanced sorting of consumers by status or address.
+* **Location Services:** Geotagging for every processed reading.
 
 ---
 
 ## 🚀 How to Run / Запуск
 
-1.  Clone the repository:
-    ```bash
-    git clone [https://github.com/RoninSoulKh/MappingOP.git](https://github.com/RoninSoulKh/MappingOP.git)
-    ```
-2.  Open in **Android Studio** (Ladybug or newer recommended).
-3.  Sync Gradle project.
-4.  Run on Emulator (Android 13+) or Physical Device.
+1. Clone: `git clone https://github.com/RoninSoulKh/MappingOP.git`
+2. Open in **Android Studio** (Ladybug+).
+3. Ensure you have **JDK 17** configured.
+4. Run on Android 13+ (API 33).
 
 ---
 
 ## 👥 Team / Команда
 
-* **Android Development:** [RoninSoulKh](https://github.com/RoninSoulKh) - Architecture, UI, Logic.
-* **Backend:** Private contributor - Server, API, Database.
-* **UI/UX Design:** [s1lentoath](https://github.com/s1lentoath) - Visual style, User Experience.
+* **Android Development:** [RoninSoulKh](https://github.com/RoninSoulKh) — Architecture & Core.
+* **Backend:** Private contributor — API Development.
+* **UI/UX Design:** [s1lentoath](https://github.com/s1lentoath) — Visual Concept.
 
 ---
-
-License: Proprietary / In Development.
+*License: Proprietary / In Development*
