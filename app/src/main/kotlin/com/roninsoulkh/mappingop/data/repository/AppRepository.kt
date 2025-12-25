@@ -48,10 +48,15 @@ class AppRepository(context: Context) {
         consumerDao.insertAllConsumers(consumers)
     }
 
-    // --- НОВОЕ: Функция удаления ---
     suspend fun deleteWorksheet(worksheet: Worksheet) {
         worksheetDao.deleteWorksheet(worksheet)
-        // А потребители удалятся сами благодаря настройке в Consumer.kt
+    }
+
+    suspend fun renameWorksheet(worksheet: Worksheet, newName: String) {
+        // Создаем копию объекта с новым именем
+        val updatedWorksheet = worksheet.copy(fileName = newName)
+        // Обновляем в базе
+        worksheetDao.updateWorksheet(updatedWorksheet)
     }
     // ------------------------------
 

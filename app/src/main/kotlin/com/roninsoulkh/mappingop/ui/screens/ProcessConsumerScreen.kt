@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.roninsoulkh.mappingop.domain.models.*
-import com.roninsoulkh.mappingop.utils.openMediaFile // ВАЖНО: Импорт для открытия файлов
+import com.roninsoulkh.mappingop.utils.openMediaFile
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -189,32 +189,57 @@ fun ProcessConsumerScreen(
                 leadingIcon = { Icon(Icons.Filled.Phone, null) }
             )
 
-            OutlinedTextField(
-                value = getBuildingConditionText(selectedBuildingCondition),
-                onValueChange = { },
-                label = { Text("Стан будівлі") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
-                trailingIcon = { IconButton(onClick = { showBuildingConditionDropdown = true }) { Icon(Icons.Filled.ArrowDropDown, null) } }
-            )
+            // 👇 ИЗМЕНЕНИЕ: Обернули в Box, чтобы клик работал по всей площади
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = getBuildingConditionText(selectedBuildingCondition),
+                    onValueChange = { },
+                    label = { Text("Стан будівлі") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
+                )
+                // Невидимый слой, ловящий клик
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { showBuildingConditionDropdown = true }
+                )
+            }
 
-            OutlinedTextField(
-                value = selectedConsumerType?.let { getConsumerTypeText(it) } ?: "",
-                onValueChange = { },
-                label = { Text("Класифікатор споживача") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
-                trailingIcon = { IconButton(onClick = { showConsumerTypeDropdown = true }) { Icon(Icons.Filled.ArrowDropDown, null) } }
-            )
+            // 👇 ИЗМЕНЕНИЕ: То же самое для Классификатора
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = selectedConsumerType?.let { getConsumerTypeText(it) } ?: "",
+                    onValueChange = { },
+                    label = { Text("Класифікатор споживача") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { showConsumerTypeDropdown = true }
+                )
+            }
 
-            OutlinedTextField(
-                value = selectedWorkType?.let { getWorkTypeText(it) } ?: "",
-                onValueChange = { },
-                label = { Text("Тип відпрацювання") },
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
-                trailingIcon = { IconButton(onClick = { showWorkTypeDropdown = true }) { Icon(Icons.Filled.ArrowDropDown, null) } }
-            )
+            // 👇 ИЗМЕНЕНИЕ: То же самое для Типа отработки
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = selectedWorkType?.let { getWorkTypeText(it) } ?: "",
+                    onValueChange = { },
+                    label = { Text("Тип відпрацювання") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { showWorkTypeDropdown = true }
+                )
+            }
 
             OutlinedTextField(
                 value = comment,
@@ -251,7 +276,7 @@ fun ProcessConsumerScreen(
                         modifier = Modifier
                             .size(100.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { openMediaFile(context, path) } // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ
+                            .clickable { openMediaFile(context, path) }
                     ) {
                         if (isVideo) {
                             Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {

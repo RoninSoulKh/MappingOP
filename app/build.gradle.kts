@@ -110,4 +110,10 @@ dependencies {
 
     // Изображения (Coil)
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Изображения (Coil)
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Экспорт Excel файла (Apache POI)
+    implementation("org.apache.poi:poi-ooxml:5.2.3")
 }

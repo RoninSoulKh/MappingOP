@@ -32,7 +32,6 @@ fun ConsumerListScreen(
     var selectedCity by remember { mutableStateOf<String?>(null) } // null = Все населенные пункты
 
     // --- ЛОГИКА "УМНОГО" СПИСКА ГОРОДОВ ---
-    // Мы один раз пробегаем по всем абонентам и собираем уникальные названия сел/городов
     val availableCities = remember(consumers) {
         consumers.map { extractCityFromAddress(it.rawAddress) }
             .distinct()
@@ -40,7 +39,6 @@ fun ConsumerListScreen(
     }
 
     // --- ГЛАВНАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
-    // Этот список пересчитывается автоматически, когда меняется поиск или фильтр
     val filteredConsumers = remember(consumers, searchQuery, statusFilter, sortOption, selectedCity) {
         consumers.filter { consumer ->
             // 1. Поиск (по всем полям)
@@ -49,7 +47,8 @@ fun ConsumerListScreen(
                     consumer.name.lowercase().contains(query) ||
                     consumer.orNumber.contains(query) ||
                     consumer.rawAddress.lowercase().contains(query) ||
-                    (consumer.meterNumber?.contains(query) == true)
+                    (consumer.meterNumber?.contains(query) == true) ||
+                    (consumer.phone?.contains(query) == true)
 
             // 2. Статус (Обработан/Нет)
             val matchesStatus = when (statusFilter) {
@@ -78,6 +77,7 @@ fun ConsumerListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
+                    .statusBarsPadding() // Отступ от статус-бара (часы/зарядка)
             ) {
                 // Верхняя панель с кнопкой Назад и Поиском
                 Row(
@@ -90,7 +90,7 @@ fun ConsumerListScreen(
                         Icon(Icons.Filled.ArrowBack, "Назад")
                     }
 
-                    // Поле поиска
+                    // Поле поиска (теперь занимает всё место, так как кнопки экспорта нет)
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -260,9 +260,8 @@ fun CityFilterChip(cities: List<String>, selectedCity: String?, onCitySelected: 
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.heightIn(max = 300.dp) // Ограничиваем высоту, если сел много
+            modifier = Modifier.heightIn(max = 300.dp) // Ограничиваем высоту
         ) {
-            // Опция "Все"
             DropdownMenuItem(
                 text = { Text("Всі населені пункти") },
                 onClick = {
@@ -274,7 +273,6 @@ fun CityFilterChip(cities: List<String>, selectedCity: String?, onCitySelected: 
                 }
             )
             Divider()
-            // Список городов
             cities.forEach { city ->
                 DropdownMenuItem(
                     text = { Text(city) },
@@ -352,7 +350,6 @@ fun ConsumerCard(
 }
 
 // --- ЛОГИКА ПАРСИНГА АДРЕСА ---
-// Функция ищет маркеры "с.", "м.", "смт" и возвращает часть адреса
 fun extractCityFromAddress(address: String): String {
     val parts = address.split(",").map { it.trim() }
 
@@ -365,7 +362,7 @@ fun extractCityFromAddress(address: String): String {
                 part.startsWith("с-ще ", ignoreCase = true)
     }
 
-    return cityPart ?: "Інше" // Если не нашли, кидаем в "Інше"
+    return cityPart ?: "Інше"
 }
 
 // --- ENUMS ---
