@@ -58,10 +58,10 @@ The project has been updated to follow **Clean Architecture** principles to ensu
 * **Modular Architecture:** Clean separation of concerns (Data, Domain, App).
 * **Entity Mapping:** Seamless transformation between Database entities and UI models.
 * **Offline Storage:** Full Room DB integration for seamless work without internet.
+* **Search & Filters:** Advanced sorting of consumers by status or address.
 
 ### 🚧 In Progress / В разработке
 * **Complex UI States:** Developing detailed consumer views and input validation.
-* **Search & Filters:** Advanced sorting of consumers by status or address.
 * **Location Services:** Geotagging for every processed reading.
 
 ---
@@ -77,9 +77,9 @@ The project has been updated to follow **Clean Architecture** principles to ensu
 
 ## 👥 Team / Команда
 
-* **Android Development:** [RoninSoulKh](https://github.com/RoninSoulKh) — Architecture & Core.
-* **Backend:** Private contributor — API Development.
-* **UI/UX Design:** [s1lentoath](https://github.com/s1lentoath) — Visual Concept.
+* **Android Development:** [RoninSoulKh](https://github.com/RoninSoulKh) — Architecture, UI, Logic.
+* **Backend:** [EmsFear](https://github.com/EmsFear) — Server, API, Database.
+* **UI/UX Design:** [s1lentoath](https://github.com/s1lentoath) — Visual style, User Experience.
 
 ---
 *License: Proprietary / In Development*
