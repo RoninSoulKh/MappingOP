@@ -5,9 +5,9 @@
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=android&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active%20Dev-orange?style=for-the-badge)
 
-**MappingOP** is a mobile application designed to automate the workflow of energy grid controllers. It replaces paper worksheets with a digital system for route planning, meter reading, and data synchronization.
+**MappingOP** is a mobile application for automating the work of field teams working with consumers. It replaces paper worksheets with a digital system for route planning, meter reading, and data synchronization.
 
-> **MappingOP** — мобильное приложение для автоматизации работы контролеров электросетей. Оно заменяет бумажные ведомости цифровой системой для планирования маршрута, снятия показаний и синхронизации данных.
+> **MappingOP** — мобильное приложение для автоматизации работы выездных бригад для работы с потребителями. Оно заменяет бумажные ведомости цифровой системой для планирования маршрута, снятия показаний и синхронизации данных.
 
 ---
 
