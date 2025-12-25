@@ -75,7 +75,7 @@ The project is built using modern Android development practices (2024/2025 stand
 
 * **Android Development:** [RoninSoulKh](https://github.com/RoninSoulKh) - Architecture, UI, Logic.
 * **Backend:** Private contributor - Server, API, Database.
-* **UI/UX Design:** Private contributor - Visual style, User Experience.
+* **UI/UX Design:** [s1lentoath](https://github.com/s1lentoath) - Visual style, User Experience.
 
 ---
 
