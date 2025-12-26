@@ -5,7 +5,7 @@
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=android&logoColor=white)
 ![Architecture](https://img.shields.io/badge/Clean%20Architecture-MVVM-blue?style=for-the-badge)
 
-**MappingOP** is a high-tech solution designed to automate the work of field crews operating in active conflict zones. The app completely replaces paper-based worksheets, ensuring stable operation even in areas with no internet coverage and GPS interference.
+**MappingOP** is a high-tech solution designed to automate the work of field crews operating in active conflict zones. [cite_start]The app completely replaces paper-based worksheets, ensuring stable operation even in areas with no internet coverage and GPS interference. [cite: 41, 47]
 
 ---
 
@@ -21,46 +21,54 @@ We have divided the development into three key stages. Currently, we are transit
 
 ---
 
+## 👥 Team (Команда)
+
+* [cite_start]**[RoninSoulKh](https://github.com/RoninSoulKh)** — Lead Developer: Architecture, Frontend, Logging, and Data Processing. [cite: 63]
+* [cite_start]**[EmsFear](https://github.com/EmsFear)** — Backend Developer: Server-side logic and API synchronization. [cite: 35, 57]
+* [cite_start]**[s1lentoath](https://github.com/s1lentoath)** — UI/UX Designer: Interface concept and visual identity. [cite: 61]
+
+---
+
 ## 🎯 Problems & Solutions (Проблемы и решения)
 
-In field conditions, paper worksheets often get damaged by weather, and human error leads to incorrect dates or skipped addresses.
+[cite_start]In field conditions, paper worksheets often get damaged by weather, and human error leads to incorrect dates or skipped addresses. [cite: 42, 43]
 **MappingOP** solves this through:
-* **Offline-first Architecture**: Full functionality without internet using Room DB.
-* **Automatic Logging**: Precise time and date tracking for every processed object.
-* **Digital Mapping**: Rapid building search even when GPS is suppressed.
+* [cite_start]**Offline-first Architecture**: Full functionality without internet using Room DB. [cite: 47, 48]
+* [cite_start]**Automatic Logging**: Precise time and date tracking for every processed object. [cite: 17, 50]
+* [cite_start]**Digital Mapping**: Rapid building search even when GPS is suppressed. [cite: 52]
 
 ---
 
 ## ✨ Core Features (Основные возможности)
 
 ### 1. Smart Worksheet Import (Импорт ведомостей)
-The system automatically parses Excel files (.xlsx), creating convenient consumer cards with all necessary data: account ID, address, debt amount, and meter number.
+[cite_start]The system automatically parses Excel files (.xlsx), creating convenient consumer cards with all necessary data: account ID, address, debt amount, and meter number. [cite: 48]
 
 ### 2. Offline Mapping (Оффлайн-карты)
-Integration with **OpenStreetMap (OSM)** and **Visicom API** allows viewing building outlines and numbers even in offline mode.
-* **Visualization**: Buildings from the worksheet are highlighted in red on the map.
+[cite_start]Integration with **OpenStreetMap (OSM)** and **Visicom API** allows viewing building outlines and numbers even in offline mode. [cite: 52]
+* [cite_start]**Visualization**: Buildings from the worksheet are highlighted in red on the map. [cite: 4, 52]
 
 ### 3. Result Recording (Фиксация результатов)
-User-friendly interface for entering meter readings, building status, and processing types (hand-delivered, refusal, etc.) with automatic database saving.
+[cite_start]User-friendly interface for entering meter readings, building status, and processing types (hand-delivered, refusal, etc.) with automatic database saving. [cite: 50]
 
 ---
 
 ## ⚖️ Legal & Licensing (Юридическая чистота)
 The project is developed with strict adherence to copyright laws:
 * **Mapping**: Data from **OpenStreetMap** (ODbL license).
-* **API**: **Visicom API** usage is strictly within free limits (1500 req/day).
+* [cite_start]**API**: **Visicom API** usage is strictly within free limits (1500 req/day). [cite: 1]
 * **Open Source**: All libraries use **MIT** or **Apache 2.0** licenses.
 * **Typography**: **Google Fonts** (OFL license).
 
 ---
 
 ## 🏗 Tech Stack (Технологический стек)
-* **Language**: Kotlin.
-* **UI Framework**: Jetpack Compose.
-* **Database**: Room (Offline-first).
-* **Architecture**: MVVM.
-* **Document Processing**: Apache POI.
-* **Languages**: Ukrainian (Primary), English, Russian.
+* [cite_start]**Language**: Kotlin. [cite: 60]
+* [cite_start]**UI Framework**: Jetpack Compose. [cite: 60]
+* [cite_start]**Database**: Room (Offline-first). [cite: 31, 48]
+* [cite_start]**Architecture**: MVVM. [cite: 60]
+* [cite_start]**Document Processing**: Apache POI. [cite: 48]
+* [cite_start]**Languages**: Ukrainian (Primary), English, Russian. [cite: 21, 46]
 
 ---
 
