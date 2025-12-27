@@ -1,4 +1,4 @@
-# 📊 MappingOP: Field Operator Mobile Workspace
+# MappingOP 🗺️
 
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
@@ -9,73 +9,65 @@
 
 ---
 
-## 🛣 Project Roadmap (Дорожная карта проекта)
+## 🎯 О Проекте (About)
 
-We have divided the development into three key stages. Currently, we are transitioning from stabilizing the foundation to UI cleanup and optimization.
+Проект решает критически важные задачи навигации и координации в сложных условиях.
+MappingOP заменяет устаревшие бумажные методы цифровым решением, которое работает там, где другие приложения отказывают.
 
-### 🇷🇺 Russian Version
-![Roadmap RU](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/Ru.jpg)
-
-### 🇬🇧 English Version
-![Roadmap EN](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/En.jpg)
-
----
-
-## 👥 Team (Команда)
-
-* **[RoninSoulKh](https://github.com/RoninSoulKh)** — Lead Developer: Architecture, Frontend, Logging, and Data Processing.
-* **[EmsFear](https://github.com/EmsFear)** — Backend Developer: Server-side logic and API synchronization.
-* **[s1lentoath](https://github.com/s1lentoath)** — UI/UX Designer: Interface concept and visual identity.
+**Key Features:**
+* 🛡️ **Автономность:** Полная работа без интернета (Offline-first).
+* 📍 **Навигация без GPS:** Инструменты для ориентирования в условиях помех (GPS interference).
+* 🚀 **Performance:** Мгновенная загрузка и работа с тяжелыми картами.
 
 ---
 
-## 🎯 Problems & Solutions (Проблемы и решения)
+## 🛣️ Дорожная Карта (Roadmap)
 
-In field conditions, paper worksheets often get damaged by weather, and human error leads to incorrect dates or skipped addresses.
-**MappingOP** solves this through:
-* **Offline-first Architecture**: Full functionality without internet using Room DB.
-* **Automatic Logging**: Precise time and date tracking for every processed object.
-* **Digital Mapping**: Rapid building search even when GPS is suppressed.
+Текущий статус разработки и планы по внедрению функционала.
 
----
+### Версия на русском языке
 
-## ✨ Core Features (Основные возможности)
-
-### 1. Smart Worksheet Import (Импорт ведомостей)
-The system automatically parses Excel files (.xlsx), creating convenient consumer cards with all necessary data: account ID, address, debt amount, and meter number.
-
-### 2. Offline Mapping (Оффлайн-карты)
-Integration with **OpenStreetMap (OSM)** and **Visicom API** allows viewing building outlines and numbers even in offline mode.
-* **Visualization**: Buildings from the worksheet are highlighted in red on the map.
-
-### 3. Result Recording (Фиксация результатов)
-User-friendly interface for entering meter readings, building status, and processing types (hand-delivered, refusal, etc.) with automatic database saving.
+![Дорожная Карта Проекта (RU)](assets/roadmap_ru.png)
+*(Не забудьте проверить путь к файлу: `assets/` или другая папка, куда вы загрузили картинки)*
 
 ---
 
-## ⚖️ Legal & Licensing (Юридическая чистота)
-The project is developed with strict adherence to copyright laws:
-* **Mapping**: Data from **OpenStreetMap** (ODbL license).
-* **API**: **Visicom API** usage is strictly within free limits (1500 req/day).
-* **Open Source**: All libraries use **MIT** or **Apache 2.0** licenses.
-* **Typography**: **Google Fonts** (OFL license).
+### English Version
+
+![Project Roadmap (EN)](assets/roadmap_en.png)
+*(Please verify the file path matches your repository structure)*
 
 ---
 
-## 🏗 Tech Stack (Технологический стек)
-* **Language**: Kotlin.
-* **UI Framework**: Jetpack Compose.
-* **Database**: Room (Offline-first architecture).
-* **Architecture**: MVVM.
-* **Document Processing**: Apache POI.
-* **Languages**: Ukrainian (Primary), English, Russian.
+## 🛠️ Технический Стек (Tech Stack)
+
+Мы используем передовые технологии для обеспечения надежности и отказоустойчивости:
+
+* **Core:** Kotlin, Coroutines, Flow.
+* **UI:** Jetpack Compose & XML (Hybrid approach).
+* **Architecture:** Clean Architecture + MVVM.
+* **Maps:** OpenStreetMap (OSM) / osmdroid with custom caching logic.
+* **Data:** Room Database (Local storage), DataStore.
 
 ---
 
-## 🚀 Next Steps (Ближайшие планы)
-* **Refactoring**: Cleaning code from technical comments and optimizing Room structures.
-* **Coordinates**: Adding Lat/Lng fields for future map visualization.
-* **Profile**: Creating a user tab with settings and legal information.
+## 👥 Команда (Team)
+
+Над проектом работает специализированная команда:
+
+* **[RoninSoulKh](https://github.com/RoninSoulKh)** — **Lead Developer**
+    * *Responsibilities:* Architecture, Frontend, Logging, and Data Processing.
+* **[EmsFear](https://github.com/EmsFear)** — **Backend Developer**
+    * *Responsibilities:* Server-side logic and API synchronization.
+* **[s1lentoath](https://github.com/s1lentoath)** — **UI/UX Designer**
+    * *Responsibilities:* Interface concept and visual identity.
 
 ---
-*Developed to improve operational efficiency in extreme field conditions.*
+
+## 🤝 Участие (Contributing)
+
+По вопросам доступа к репозиторию и контрибьютинга, пожалуйста, свяжитесь с Lead Developer.
+
+---
+
+*Developed for stability in the most unstable conditions.*
