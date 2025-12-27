@@ -1,82 +1,81 @@
-# 📱 MappingOP
+# 📊 MappingOP: Field Operator Mobile Workspace
 
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=android&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Active%20Dev-orange?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Clean%20Architecture-MVVM-blue?style=for-the-badge)
 
-**MappingOP** is a mobile application for automating the work of field teams working with consumers. It replaces paper worksheets with a digital system for route planning, meter reading, and data synchronization.
-
-> **MappingOP** — мобильное приложение для автоматизации работы выездных бригад для работы с потребителями. Оно заменяет бумажные ведомости цифровой системой для планирования маршрута, снятия показаний и синхронизации данных.
+**MappingOP** is a high-tech solution designed to automate the work of field crews operating in active conflict zones. The app completely replaces paper-based worksheets, ensuring stable operation even in areas with no internet coverage and GPS interference.
 
 ---
 
-## 🗺️ Roadmap / Дорожная Карта
+## 🛣 Project Roadmap (Дорожная карта проекта)
 
-We are currently at **Stage 1 (Internal Architecture)**.
-Сейчас мы находимся на **Этапе 1 (Внутренняя архитектура)**.
+We have divided the development into three key stages. Currently, we are transitioning from stabilizing the foundation to UI cleanup and optimization.
 
-### English Version 🇺🇸
-![Roadmap En](assets/En.png)
+### 🇷🇺 Russian Version
+![Roadmap RU](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/Ru.jpg)
 
-<details>
-<summary><b>Click to see Russian Version / Нажмите для просмотра версии на Русском 🇷🇺</b></summary>
-
-![Roadmap Ru](assets/Ru.png)
-</details>
+### 🇬🇧 English Version
+![Roadmap EN](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/En.jpg)
 
 ---
 
-## 🛠 Tech Stack / Технологии
+## 👥 Team (Команда)
 
-The project is built using modern Android development practices (2024/2025 standards).
-
-| Category | Technology | Description |
-| :--- | :--- | :--- |
-| **Language** | Kotlin | 100% Kotlin codebase |
-| **UI** | Jetpack Compose | Material3 Design, Single Activity |
-| **Architecture** | MVVM | Model-View-ViewModel pattern |
-| **Database** | Room | Local SQLite database with Relations |
-| **Concurrency** | Coroutines & Flow | Asynchronous data handling |
-| **Files** | Apache POI | Reading/Parsing Excel (.xlsx) files |
-| **Navigation** | Compose Navigation | Type-safe navigation |
+* **[RoninSoulKh](https://github.com/RoninSoulKh)** — Lead Developer: Architecture, Frontend, Logging, and Data Processing.
+* **[EmsFear](https://github.com/EmsFear)** — Backend Developer: Server-side logic and API synchronization.
+* **[s1lentoath](https://github.com/s1lentoath)** — UI/UX Designer: Interface concept and visual identity.
 
 ---
 
-## ✨ Key Features / Возможности
+## 🎯 Problems & Solutions (Проблемы и решения)
 
-### ✅ Current (Implemented)
-* **Excel Parsing:** Importing control lists directly from `.xlsx` files.
-* **Local Database:** Storing worksheets and consumers offline using Room.
-* **Worksheets:** Viewing lists of consumers assigned to the controller.
-* **Results:** Recording meter readings and statuses (Processed/Refusal).
-
-### 🚧 In Progress & Planned
-* **Map Integration:** Visualizing consumers on a map (OSM/Visicom).
-* **Server Sync:** REST API integration for downloading tasks and uploading reports.
-* **Admin Panel:** Web-interface for managing tasks (Backend side).
-* **Route Optimization:** GPS tracking and smart routing.
+In field conditions, paper worksheets often get damaged by weather, and human error leads to incorrect dates or skipped addresses.
+**MappingOP** solves this through:
+* **Offline-first Architecture**: Full functionality without internet using Room DB.
+* **Automatic Logging**: Precise time and date tracking for every processed object.
+* **Digital Mapping**: Rapid building search even when GPS is suppressed.
 
 ---
 
-## 🚀 How to Run / Запуск
+## ✨ Core Features (Основные возможности)
 
-1.  Clone the repository:
-    ```bash
-    git clone [https://github.com/RoninSoulKh/MappingOP.git](https://github.com/RoninSoulKh/MappingOP.git)
-    ```
-2.  Open in **Android Studio** (Ladybug or newer recommended).
-3.  Sync Gradle project.
-4.  Run on Emulator (Android 13+) or Physical Device.
+### 1. Smart Worksheet Import (Импорт ведомостей)
+The system automatically parses Excel files (.xlsx), creating convenient consumer cards with all necessary data: account ID, address, debt amount, and meter number.
 
----
+### 2. Offline Mapping (Оффлайн-карты)
+Integration with **OpenStreetMap (OSM)** and **Visicom API** allows viewing building outlines and numbers even in offline mode.
+* **Visualization**: Buildings from the worksheet are highlighted in red on the map.
 
-## 👥 Team / Команда
-
-* **Android Development:** [RoninSoulKh](https://github.com/RoninSoulKh) - Architecture, UI, Logic.
-* **Backend:** Private contributor - Server, API, Database.
-* **UI/UX Design:** [s1lentoath](https://github.com/s1lentoath) - Visual style, User Experience.
+### 3. Result Recording (Фиксация результатов)
+User-friendly interface for entering meter readings, building status, and processing types (hand-delivered, refusal, etc.) with automatic database saving.
 
 ---
 
-License: Proprietary / In Development.
+## ⚖️ Legal & Licensing (Юридическая чистота)
+The project is developed with strict adherence to copyright laws:
+* **Mapping**: Data from **OpenStreetMap** (ODbL license).
+* **API**: **Visicom API** usage is strictly within free limits (1500 req/day).
+* **Open Source**: All libraries use **MIT** or **Apache 2.0** licenses.
+* **Typography**: **Google Fonts** (OFL license).
+
+---
+
+## 🏗 Tech Stack (Технологический стек)
+* **Language**: Kotlin.
+* **UI Framework**: Jetpack Compose.
+* **Database**: Room (Offline-first architecture).
+* **Architecture**: MVVM.
+* **Document Processing**: Apache POI.
+* **Languages**: Ukrainian (Primary), English, Russian.
+
+---
+
+## 🚀 Next Steps (Ближайшие планы)
+* **Refactoring**: Cleaning code from technical comments and optimizing Room structures.
+* **Coordinates**: Adding Lat/Lng fields for future map visualization.
+* **Profile**: Creating a user tab with settings and legal information.
+
+---
+*Developed to improve operational efficiency in extreme field conditions.*
