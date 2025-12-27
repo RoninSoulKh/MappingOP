@@ -27,11 +27,9 @@ MappingOP заменяет устаревшие бумажные методы ц
 
 
 ![Дорожная Карта Проекта (RU)](assets/roadmap_ru.png)
-*(Не забудьте проверить путь к файлу: `assets/` или другая папка, куда вы загрузили картинки)*
 
 
 ![Project Roadmap (EN)](assets/roadmap_en.png)
-*(Please verify the file path matches your repository structure)*
 
 ---
 
