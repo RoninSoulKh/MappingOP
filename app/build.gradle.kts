@@ -13,8 +13,8 @@ android {
         applicationId = "com.roninsoulkh.mappingop"
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 7
+        versionName = "1.0.6-NoMinify"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "app_name", "Mapping OP")
@@ -32,6 +32,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -52,6 +54,7 @@ android {
         compose = true
     }
 
+    // Это можно убрать в новых версиях, но оставим для стабильности
     composeOptions {
         kotlinCompilerExtensionVersion = "1.6.0"
     }
@@ -70,7 +73,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.activity:activity-compose:1.12.2")
 
-    // COMPOSE
+    // COMPOSE (BOM управляет версиями всех библиотек UI)
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -90,12 +93,19 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
 
-    // APACHE POI
+    // APACHE POI (Чистая версия 5.2.5 без дубликатов)
     implementation("org.apache.poi:poi-ooxml:5.2.5")
 
     // ВСПОМОГАТЕЛЬНЫЕ
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("commons-io:commons-io:2.11.0")
+
+    // Изображения (Coil) - оставлен один экземпляр
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // --- СПАСАТЕЛЬНЫЙ КРУГ ДЛЯ EXCEL (ПОДДЕРЖКА RELEASE) ---
+    // Используем последние версии для стабильности
+    implementation("commons-io:commons-io:2.15.1")
+    implementation("org.apache.logging.log4j:log4j-api:2.20.0")
 
     // ТЕСТИРОВАНИЕ
     testImplementation("junit:junit:4.13.2")
@@ -107,13 +117,4 @@ dependencies {
     // DEBUG
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-
-    // Изображения (Coil)
-    implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Изображения (Coil)
-    implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Экспорт Excel файла (Apache POI)
-    implementation("org.apache.poi:poi-ooxml:5.2.3")
 }

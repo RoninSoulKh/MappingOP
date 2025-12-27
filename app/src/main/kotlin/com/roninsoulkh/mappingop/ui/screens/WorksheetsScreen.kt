@@ -1,24 +1,18 @@
 package com.roninsoulkh.mappingop.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.roninsoulkh.mappingop.domain.models.Worksheet
 import java.text.SimpleDateFormat
 import java.util.*
@@ -34,62 +28,46 @@ fun WorksheetsScreen(
     onDeleteWorksheet: (Worksheet) -> Unit,
     onRenameWorksheet: (Worksheet, String) -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var worksheetToDelete by remember { mutableStateOf<Worksheet?>(null) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var worksheetToRename by remember { mutableStateOf<Worksheet?>(null) }
-    var newNameInput by remember { mutableStateOf("") }
+    var newNameText by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Відомості")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Badge { Text(worksheets.size.toString()) }
-                    }
-                },
+                title = { Text("Мої відомості") },
                 actions = {
                     IconButton(onClick = onAddWorksheet) {
-                        Icon(Icons.Filled.Add, "Додати")
+                        Icon(Icons.Filled.Add, contentDescription = "Імпорт")
                     }
                 }
             )
         }
-    ) { paddingValues ->
+    ) { padding ->
         if (worksheets.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Filled.Description,
-                        null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Список пустий", color = MaterialTheme.colorScheme.secondary)
-                    Text("Натисніть +, щоб додати файл", fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-                }
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text("Список пустий. Натисніть +, щоб додати.")
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(worksheets) { worksheet ->
-                    WorksheetCard(
+                    WorksheetItem(
                         worksheet = worksheet,
                         onClick = { onWorksheetClick(worksheet) },
-                        onDelete = { onDeleteWorksheet(worksheet) },
                         onRename = {
                             worksheetToRename = worksheet
-                            newNameInput = worksheet.fileName
+                            newNameText = worksheet.fileName
                             showRenameDialog = true
+                        },
+                        onDelete = {
+                            worksheetToDelete = worksheet
+                            showDeleteDialog = true
                         }
                     )
                 }
@@ -97,120 +75,107 @@ fun WorksheetsScreen(
         }
     }
 
-    // Диалог переименования
+    // --- ДИАЛОГИ ---
+    if (showDeleteDialog && worksheetToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Видалити відомість?") },
+            text = { Text("Ви збираєтесь видалити '${worksheetToDelete?.fileName}'.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    worksheetToDelete?.let { onDeleteWorksheet(it) }
+                    showDeleteDialog = false
+                }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Видалити") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Скасувати") } }
+        )
+    }
+
     if (showRenameDialog && worksheetToRename != null) {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("Перейменувати відомість") },
-            text = {
-                OutlinedTextField(
-                    value = newNameInput,
-                    onValueChange = { newNameInput = it },
-                    label = { Text("Нова назва") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
+            title = { Text("Перейменувати") },
+            text = { OutlinedTextField(value = newNameText, onValueChange = { newNameText = it }, label = { Text("Назва") }) },
             confirmButton = {
-                Button(onClick = {
-                    if (newNameInput.isNotBlank()) {
-                        onRenameWorksheet(worksheetToRename!!, newNameInput)
-                        showRenameDialog = false
-                    }
-                }) {
-                    Text("Зберегти")
-                }
+                TextButton(onClick = {
+                    if (newNameText.isNotBlank()) { worksheetToRename?.let { onRenameWorksheet(it, newNameText) } }
+                    showRenameDialog = false
+                }) { Text("Зберегти") }
             },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) {
-                    Text("Скасувати")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showRenameDialog = false }) { Text("Скасувати") } }
         )
     }
 }
 
 @Composable
-fun WorksheetCard(
+fun WorksheetItem(
     worksheet: Worksheet,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
-    onRename: () -> Unit
+    onRename: () -> Unit,
+    onDelete: () -> Unit
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
+    // Извлекаем дату из ID
+    val dateString = remember(worksheet.id) {
+        try {
+            val timestamp = worksheet.id.substringAfter("_").toLong()
+            val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+            "Імпортовано: ${sdf.format(Date(timestamp))}"
+        } catch (e: Exception) { "" }
+    }
+
+    // ИСПРАВЛЕНИЕ: Берем реальный прогресс из модели Worksheet
+    val progress = worksheet.progress
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically // Выравнивание по центру, но элементы внутри колонки будут идти вниз
-        ) {
-            // Основная информация (Имя, Дата, Прогресс)
-            Column(modifier = Modifier.weight(1f)) {
-                // 1. Имя файла
-                Text(
-                    text = worksheet.fileName,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Folder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp)
                 )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = worksheet.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (dateString.isNotEmpty()) {
+                        Text(text = dateString, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Box {
+                    IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, contentDescription = null) }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        DropdownMenuItem(text = { Text("Перейменувати") }, onClick = { expanded = false; onRename() }, leadingIcon = { Icon(Icons.Filled.Edit, null) })
+                        DropdownMenuItem(text = { Text("Видалити", color = Color.Red) }, onClick = { expanded = false; onDelete() }, leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Color.Red) })
+                    }
+                }
+            }
 
-                // 2. Дата
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(worksheet.importDate)),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // 3. 👇 ПРОГРЕСС-БАР (ВЕРНУЛСЯ!)
-                Spacer(modifier = Modifier.height(12.dp))
-                val progress = if (worksheet.totalConsumers > 0)
-                    worksheet.processedCount.toFloat() / worksheet.totalConsumers.toFloat()
-                else 0f
-
+            // Шкала выполнения
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 LinearProgressIndicator(
                     progress = progress,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
+                    modifier = Modifier.weight(1f).height(8.dp),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
-
-                // 4. Текст "Оброблено X з Y"
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                // Текст процентов (без десятичных знаков)
                 Text(
-                    text = "Оброблено ${worksheet.processedCount} з ${worksheet.totalConsumers}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
                 )
-            }
-
-            // Кнопки управления (справа)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
-                IconButton(onClick = onRename) {
-                    Icon(
-                        imageVector = Icons.Filled.Edit,
-                        contentDescription = "Перейменувати",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "Видалити",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
-                    )
-                }
             }
         }
     }

@@ -1,21 +1,47 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ==========================================================
+# ФИНАЛЬНАЯ КОНФИГУРАЦИЯ ЗАЩИТЫ КОДА (MAPPING OP v1.0.4)
+# ==========================================================
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# 1. ЗАЩИТА МОДЕЛЕЙ И БАЗЫ ДАННЫХ
+-keep class com.roninsoulkh.mappingop.domain.models.** { *; }
+-keep class androidx.room.** { *; }
+-keep interface androidx.room.** { *; }
+-dontwarn androidx.room.paging.**
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# 2. ЗАЩИТА БИБЛИОТЕКИ EXCEL (Apache POI & XMLBeans)
+-keep class org.apache.poi.** { *; }
+-keep class org.apache.xmlbeans.** { *; }
+-keep class org.openxmlformats.** { *; }
+-keep class javax.xml.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# 3. ЗАЩИТА ВСПОМОГАТЕЛЬНЫХ БИБЛИОТЕК (Фикс IOUtils и Логгера)
+-keep class org.apache.commons.** { *; }
+-dontwarn org.apache.commons.**
+# ВАЖНО: Защищаем NullLogger, который мы включим в коде
+-keep class org.apache.poi.util.NullLogger { *; }
+
+# 4. ЗАЩИТА ЖИЗНЕННОГО ЦИКЛА COMPOSE
+-keepattributes *Annotation*
+-keepclassmembers class * {
+    @androidx.compose.runtime.Composable *;
+}
+
+# 5. ПОДАВЛЕНИЕ ПРЕДУПРЕЖДЕНИЙ
+-dontwarn org.apache.poi.**
+-dontwarn org.apache.xmlbeans.**
+-dontwarn org.openxmlformats.**
+-dontwarn schemasMicrosoftCom.**
+-dontwarn org.etsi.uri.**
+-dontwarn org.w3c.dom.**
+-dontwarn org.xml.sax.**
+-dontwarn javax.xml.**
+-dontwarn java.awt.**
+-dontwarn javax.accessibility.**
+-dontwarn com.graphbuilder.**
+-dontwarn com.github.javaparser.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn aQute.bnd.annotation.**
+-dontwarn com.sun.org.apache.**
+
+# Сохраняем информацию для отчетов об ошибках
+-keepattributes SourceFile,LineNumberTable

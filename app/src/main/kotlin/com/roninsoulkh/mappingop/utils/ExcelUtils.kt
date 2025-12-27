@@ -23,9 +23,9 @@ object ExcelUtils {
         val workbook = XSSFWorkbook()
         val sheet = workbook.createSheet("Звіт")
 
-        // --- 1. НАСТРОЙКА СТИЛЕЙ (С ГРАНИЦАМИ) ---
+        // --- 1. НАСТРОЙКА СТИЛЕЙ ---
 
-        // Стиль для ЗАГОЛОВКА (Жирный, Серый фон, Границы)
+        // Стиль для ЗАГОЛОВКА
         val headerFont = workbook.createFont().apply {
             bold = true
             fontHeightInPoints = 12.toShort()
@@ -34,70 +34,69 @@ object ExcelUtils {
             setFont(headerFont)
             fillForegroundColor = IndexedColors.GREY_25_PERCENT.index
             fillPattern = FillPatternType.SOLID_FOREGROUND
-
-            // 👇 ДОБАВЛЯЕМ РАМКИ (СЕТКУ)
             borderBottom = BorderStyle.THIN
             borderTop = BorderStyle.THIN
             borderRight = BorderStyle.THIN
             borderLeft = BorderStyle.THIN
         }
 
-        // Стиль для ОБЫЧНЫХ ЯЧЕЕК (Просто границы)
+        // Стиль для ДАННЫХ
         val dataCellStyle = workbook.createCellStyle().apply {
-            // 👇 ДОБАВЛЯЕМ РАМКИ (СЕТКУ)
             borderBottom = BorderStyle.THIN
             borderTop = BorderStyle.THIN
             borderRight = BorderStyle.THIN
             borderLeft = BorderStyle.THIN
-
-            // Чтобы длинный текст переносился на новую строку (если нужно)
             wrapText = true
         }
 
-        // --- 2. СОЗДАЕМ ШАПКУ ТАБЛИЦЫ ---
+        // --- 2. ШАПКА ТАБЛИЦЫ  ---
         val headers = listOf(
-            "Номер ОР",          // 0
-            "ПІБ",               // 1
-            "Адреса",            // 2
-            "Телефон (База)",    // 3
-            "Лічильник (База)",  // 4
-            "Сума боргу",        // 5
-            "Телефон (Факт)",    // 6
-            "Показники",         // 7
-            "Стан будівлі",      // 8
-            "Фото/Відео",        // 9
-            "Класифікатор",      // 10
-            "Тип відпрацювання", // 11
-            "Коментар"           // 12
+            "Номер ОР",             // 0
+            "ПІБ",                  // 1
+            "Адреса",               // 2
+            "Телефон (База)",       // 3
+            "Лічильник (База)",     // 4
+            "Сума боргу",           // 5
+            "Дата виконаних робіт", // 6
+            "Телефон (Факт)",       // 7
+            "Показники",            // 8
+            "Стан будівлі",         // 9
+            "Фото/Відео",           // 10
+            "Класифікатор",         // 11
+            "Тип відпрацювання",    // 12
+            "Коментар"              // 13
         )
 
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { index, title ->
             val cell = headerRow.createCell(index)
             cell.setCellValue(title)
-            cell.cellStyle = headerCellStyle // Применяем стиль заголовка
+            cell.cellStyle = headerCellStyle
 
             // Ширина колонок
             when (index) {
                 1 -> sheet.setColumnWidth(index, 30 * 256) // ФИО
                 2 -> sheet.setColumnWidth(index, 40 * 256) // Адрес
-                12 -> sheet.setColumnWidth(index, 30 * 256) // Комментарий
+                6 -> sheet.setColumnWidth(index, 15 * 256) // Дата (пошире)
+                13 -> sheet.setColumnWidth(index, 30 * 256) // Комментарий
                 else -> sheet.setColumnWidth(index, 15 * 256) // Остальные
             }
         }
 
-        // --- 3. ЗАПОЛНЯЕМ ДАННЫЕ (СЕТКА БУДЕТ ВЕЗДЕ) ---
+        // Форматтер даты: ДД.ММ.ГГГГ
+        val dateFormatter = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+
+        // --- 3. ЗАПОЛНЕНИЕ ДАННЫХ ---
         data.forEachIndexed { index, (consumer, result) ->
             val row = sheet.createRow(index + 1)
 
-            // ВАЖНО: Сначала создаем пустые ячейки с рамками для ВСЕХ 13 колонок
-            // Это гарантирует, что сетка будет даже там, где нет данных
-            for (i in 0..12) {
+            // Создаем пустые ячейки с рамками (теперь их 14, от 0 до 13)
+            for (i in 0..13) {
                 val cell = row.createCell(i)
-                cell.cellStyle = dataCellStyle // Применяем стиль с рамками
+                cell.cellStyle = dataCellStyle
             }
 
-            // А теперь заполняем их данными
+            // Заполняем данными потребителя
             row.getCell(0).setCellValue(consumer.orNumber)
             row.getCell(1).setCellValue(consumer.name)
             row.getCell(2).setCellValue(consumer.rawAddress)
@@ -105,24 +104,35 @@ object ExcelUtils {
             row.getCell(4).setCellValue(consumer.meterNumber ?: "")
             row.getCell(5).setCellValue(consumer.debtAmount ?: 0.0)
 
+            // Данные результата (если есть)
             if (result != null) {
-                row.getCell(6).setCellValue(result.newPhone ?: "")
-                row.getCell(7).setCellValue(result.meterReading?.toString() ?: "")
-                row.getCell(8).setCellValue(result.buildingCondition?.let { getBuildingText(it) } ?: "")
+                // 1. Дата (Новое поле)
+                val dateString = dateFormatter.format(Date(result.processedAt))
+                row.getCell(6).setCellValue(dateString)
+
+                // 2. Остальные поля (индексы сдвинулись на +1)
+                row.getCell(7).setCellValue(result.newPhone ?: "")
+                row.getCell(8).setCellValue(result.meterReading?.toString() ?: "")
+                row.getCell(9).setCellValue(result.buildingCondition?.let { getBuildingText(it) } ?: "")
 
                 val hasMedia = if (result.photos.isNotEmpty()) "Так" else "Ні"
-                row.getCell(9).setCellValue(hasMedia)
+                row.getCell(10).setCellValue(hasMedia)
 
-                row.getCell(10).setCellValue(result.consumerType?.let { getConsumerTypeText(it) } ?: "")
-                row.getCell(11).setCellValue(result.workType?.let { getWorkTypeText(it) } ?: "")
-                row.getCell(12).setCellValue(result.comment ?: "")
+                row.getCell(11).setCellValue(result.consumerType?.let { getConsumerTypeText(it) } ?: "")
+                row.getCell(12).setCellValue(result.workType?.let { getWorkTypeText(it) } ?: "")
+                row.getCell(13).setCellValue(result.comment ?: "")
             }
         }
 
         // --- 4. СОХРАНЕНИЕ ---
         val timeStamp = SimpleDateFormat("dd-MM-yyyy_HH-mm", Locale.getDefault()).format(Date())
-        val cleanName = worksheetName.replace(" ", "_").replace("/", "-")
-        val fileName = "Zvit_${cleanName}_$timeStamp.xlsx"
+
+        // Убираем .xlsx из имени ведомости (на всякий случай, если он там есть)
+        val cleanName = worksheetName.replace(".xlsx", "", ignoreCase = true)
+            .replace(" ", "_")
+            .replace("/", "-")
+
+        val fileName = "Звіт_${cleanName}_$timeStamp.xlsx"
 
         val file = File(context.cacheDir, fileName)
         FileOutputStream(file).use { outputStream ->
@@ -130,7 +140,7 @@ object ExcelUtils {
         }
         workbook.close()
 
-        // --- 5. ОТКРЫТИЕ ---
+        // --- 5. ОТКРЫТИЕ/ОТПРАВКА ---
         shareFile(context, file)
     }
 

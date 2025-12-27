@@ -9,14 +9,25 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.roninsoulkh.mappingop.data.parser.ExcelParser
 import com.roninsoulkh.mappingop.domain.models.Consumer
 import com.roninsoulkh.mappingop.ui.screens.*
@@ -25,6 +36,7 @@ import com.roninsoulkh.mappingop.domain.models.Worksheet
 import com.roninsoulkh.mappingop.ui.theme.MappingOPTheme
 import com.roninsoulkh.mappingop.data.repository.AppRepository
 import com.roninsoulkh.mappingop.utils.ExcelUtils
+import com.roninsoulkh.mappingop.utils.SettingsManager
 import com.roninsoulkh.mappingop.data.database.AppDatabase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,19 +47,59 @@ class MainActivity : ComponentActivity() {
     private val repository by lazy { AppRepository(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // ВНИМАНИЕ: System.setProperty отсюда УБРАЛИ. Он теперь внизу, в companion object.
+
         setContent {
-            MappingOPTheme {
+            val context = LocalContext.current
+            var currentThemeSetting by remember { mutableStateOf(SettingsManager.getTheme(context)) }
+
+            val useDarkTheme = when (currentThemeSetting) {
+                "Light" -> false
+                "Dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val window = (view.context as ComponentActivity).window
+                    window.statusBarColor = Color.Transparent.toArgb()
+                    WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !useDarkTheme
+                }
+            }
+
+            MappingOPTheme(darkTheme = useDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(repository)
+                    MainScreen(
+                        repository = repository,
+                        currentTheme = currentThemeSetting,
+                        onThemeChanged = { newTheme ->
+                            SettingsManager.saveTheme(context, newTheme)
+                            currentThemeSetting = newTheme
+                        }
+                    )
                 }
             }
         }
     }
+
+    // --- ВОТ ГЛАВНЫЙ ФИКС ДЛЯ EXCEL ---
+    companion object {
+        init {
+            // Эта настройка сработает самой первой, еще до загрузки Activity.
+            // Мы ставим "пустой" логгер, чтобы Excel не искал Log4j.
+            System.setProperty("org.apache.poi.util.POILogger", "org.apache.poi.util.NullLogger")
+        }
+    }
 }
+
+// --- ВСЕ ОСТАЛЬНЫЕ КЛАССЫ ТЕПЕРЬ СНАРУЖИ (КАК И ДОЛЖНО БЫТЬ) ---
 
 enum class BottomTab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     HOME("Головна", Icons.Filled.Home),
@@ -58,7 +110,11 @@ enum class BottomTab(val label: String, val icon: androidx.compose.ui.graphics.v
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(repository: AppRepository) {
+fun MainScreen(
+    repository: AppRepository,
+    currentTheme: String,
+    onThemeChanged: (String) -> Unit
+) {
     var currentTab by remember { mutableStateOf(BottomTab.HOME) }
     var currentWorksheetsScreen by remember { mutableStateOf<AppScreen>(AppScreen.Worksheets) }
     var selectedWorksheetId by remember { mutableStateOf<String?>(null) }
@@ -89,12 +145,22 @@ fun MainScreen(repository: AppRepository) {
         workResultForSelectedConsumer = selectedConsumer?.let { repository.getWorkResultByConsumerId(it.id) }
     }
 
+    val showBottomBar = when (currentTab) {
+        BottomTab.LIST -> {
+            currentWorksheetsScreen != AppScreen.ConsumerDetail &&
+                    currentWorksheetsScreen != AppScreen.ProcessConsumer
+        }
+        else -> true
+    }
+
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { fileUri ->
             coroutineScope.launch {
                 kotlin.runCatching {
                     context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                        val fileName = getFileNameFromUri(context, fileUri)
+                        val rawFileName = getFileNameFromUri(context, fileUri)
+                        val fileName = rawFileName.replace(".xlsx", "", ignoreCase = true)
+
                         val worksheetId = "worksheet_${System.currentTimeMillis()}"
                         val consumers = ExcelParser().parseWorkbook(inputStream, worksheetId)
                         if (consumers.isNotEmpty()) {
@@ -118,111 +184,134 @@ fun MainScreen(repository: AppRepository) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                BottomTab.values().forEach { tab ->
-                    NavigationBarItem(
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) },
-                        selected = currentTab == tab,
-                        onClick = { currentTab = tab }
-                    )
+            if (showBottomBar) {
+                NavigationBar {
+                    BottomTab.values().forEach { tab ->
+                        NavigationBarItem(
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            label = { Text(tab.label) },
+                            selected = currentTab == tab,
+                            onClick = { currentTab = tab }
+                        )
+                    }
                 }
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            when (currentTab) {
-                BottomTab.HOME -> {
-                    HomeScreen(
-                        worksheets = worksheets,
-                        onImportClick = { launchImport = true },
-                        onExportClick = { worksheet ->
-                            coroutineScope.launch {
-                                try {
-                                    val db = AppDatabase.getDatabase(context)
-                                    val results = db.workResultDao().getWorkResultsByWorksheetId(worksheet.id)
-                                    val consumers = db.consumerDao().getConsumersByWorksheetIdSync(worksheet.id)
-                                    val combinedData = consumers.map { c ->
-                                        val res = results.find { it.consumerId == c.id }
-                                        c to res
-                                    }
-                                    val sortedData = combinedData.sortedWith(
-                                        compareByDescending<Pair<Consumer, WorkResult?>> { (_, res) -> res?.processedAt ?: 0L }
-                                            .thenBy { (c, _) -> c.rawAddress }
-                                    )
-                                    ExcelUtils.exportReport(context, worksheet.fileName, sortedData)
-                                } catch (e: Exception) {
-                                    errorMessage = "Помилка експорту: ${e.message}"; showErrorToast = true
-                                }
-                            }
-                        }
-                    )
+        Box(modifier = Modifier.padding(bottom = paddingValues.calculateBottomPadding())) {
+
+            // 1. Анимация переключения вкладок (Головна, Відомості, Мапа, Профіль)
+            AnimatedContent(
+                targetState = currentTab,
+                label = "TabAnimation",
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
                 }
-                BottomTab.MAP -> MapScreen()
-                BottomTab.PROFILE -> ProfileScreen()
-                BottomTab.LIST -> {
-                    when (currentWorksheetsScreen) {
-                        AppScreen.Worksheets -> {
-                            WorksheetsScreen(
-                                worksheets = worksheets,
-                                onWorksheetClick = { ws -> selectedWorksheetId = ws.id; currentWorksheetsScreen = AppScreen.ConsumerList },
-                                onAddWorksheet = { launchImport = true },
-                                onBackClick = { },
-                                onViewResults = { currentWorksheetsScreen = AppScreen.WorkResults },
-                                onDeleteWorksheet = { ws -> coroutineScope.launch { repository.deleteWorksheet(ws) } },
-                                // 👇 ОБРАБОТКА ПЕРЕИМЕНОВАНИЯ
-                                onRenameWorksheet = { ws, newName ->
-                                    coroutineScope.launch {
-                                        repository.renameWorksheet(ws, newName)
-                                        successMessage = "Перейменовано"; showSuccessToast = true
+            ) { targetTab ->
+                when (targetTab) {
+                    BottomTab.HOME -> {
+                        HomeScreen(
+                            worksheets = worksheets,
+                            onImportClick = { launchImport = true },
+                            onExportClick = { worksheet ->
+                                coroutineScope.launch {
+                                    try {
+                                        val db = AppDatabase.getDatabase(context)
+                                        val results = db.workResultDao().getWorkResultsByWorksheetId(worksheet.id)
+                                        val consumers = db.consumerDao().getConsumersByWorksheetIdSync(worksheet.id)
+                                        val combinedData = consumers.map { c ->
+                                            val res = results.find { it.consumerId == c.id }
+                                            c to res
+                                        }
+                                        val sortedData = combinedData.sortedWith(
+                                            compareByDescending<Pair<Consumer, WorkResult?>> { (_, res) -> res?.processedAt ?: 0L }
+                                                .thenBy { (c, _) -> c.rawAddress }
+                                        )
+                                        ExcelUtils.exportReport(context, worksheet.fileName, sortedData)
+                                    } catch (e: Exception) {
+                                        errorMessage = "Помилка експорту: ${e.message}"; showErrorToast = true
                                     }
                                 }
-                            )
-                        }
-                        AppScreen.ConsumerList -> {
-                            BackHandler { currentWorksheetsScreen = AppScreen.Worksheets }
-                            ConsumerListScreen(
-                                consumers = worksheetConsumers,
-                                onConsumerClick = { c -> selectedConsumer = c; currentWorksheetsScreen = AppScreen.ConsumerDetail },
-                                onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets }
-                            )
-                        }
-                        AppScreen.ConsumerDetail -> {
-                            BackHandler { currentWorksheetsScreen = AppScreen.ConsumerList }
-                            if (selectedConsumer != null) {
-                                ConsumerDetailScreen(
-                                    consumer = selectedConsumer!!,
-                                    workResult = workResultForSelectedConsumer,
-                                    onBackClick = { currentWorksheetsScreen = AppScreen.ConsumerList },
-                                    onProcessClick = { currentWorksheetsScreen = AppScreen.ProcessConsumer }
-                                )
                             }
-                        }
-                        AppScreen.ProcessConsumer -> {
-                            BackHandler { currentWorksheetsScreen = AppScreen.ConsumerDetail }
-                            if (selectedConsumer != null) {
-                                ProcessConsumerScreen(
-                                    consumer = selectedConsumer!!,
-                                    initialResult = workResultForSelectedConsumer,
-                                    onSave = { result ->
-                                        coroutineScope.launch {
-                                            repository.saveWorkResult(selectedConsumer!!.id, result)
-                                            withContext(Dispatchers.Main) {
-                                                workResultForSelectedConsumer = result
-                                                currentWorksheetsScreen = AppScreen.ConsumerDetail
-                                                successMessage = "✅ Дані збережено"; showSuccessToast = true
+                        )
+                    }
+                    BottomTab.MAP -> MapScreen()
+                    BottomTab.PROFILE -> ProfileScreen(
+                        currentTheme = currentTheme,
+                        onThemeSelected = onThemeChanged
+                    )
+                    BottomTab.LIST -> {
+                        // 2. Анимация переключения экранов внутри Ведомостей
+                        AnimatedContent(
+                            targetState = currentWorksheetsScreen,
+                            label = "ListScreenAnimation",
+                            transitionSpec = {
+                                fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
+                            }
+                        ) { targetScreen ->
+                            when (targetScreen) {
+                                AppScreen.Worksheets -> {
+                                    WorksheetsScreen(
+                                        worksheets = worksheets,
+                                        onWorksheetClick = { ws -> selectedWorksheetId = ws.id; currentWorksheetsScreen = AppScreen.ConsumerList },
+                                        onAddWorksheet = { launchImport = true },
+                                        onBackClick = { },
+                                        onViewResults = { currentWorksheetsScreen = AppScreen.WorkResults },
+                                        onDeleteWorksheet = { ws -> coroutineScope.launch { repository.deleteWorksheet(ws) } },
+                                        onRenameWorksheet = { ws, newName ->
+                                            coroutineScope.launch {
+                                                repository.renameWorksheet(ws, newName)
+                                                successMessage = "Перейменовано"; showSuccessToast = true
                                             }
                                         }
-                                    },
-                                    onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
-                                )
+                                    )
+                                }
+                                AppScreen.ConsumerList -> {
+                                    BackHandler { currentWorksheetsScreen = AppScreen.Worksheets }
+                                    ConsumerListScreen(
+                                        consumers = worksheetConsumers,
+                                        onConsumerClick = { c -> selectedConsumer = c; currentWorksheetsScreen = AppScreen.ConsumerDetail },
+                                        onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets }
+                                    )
+                                }
+                                AppScreen.ConsumerDetail -> {
+                                    BackHandler { currentWorksheetsScreen = AppScreen.ConsumerList }
+                                    if (selectedConsumer != null) {
+                                        ConsumerDetailScreen(
+                                            consumer = selectedConsumer!!,
+                                            workResult = workResultForSelectedConsumer,
+                                            onBackClick = { currentWorksheetsScreen = AppScreen.ConsumerList },
+                                            onProcessClick = { currentWorksheetsScreen = AppScreen.ProcessConsumer }
+                                        )
+                                    }
+                                }
+                                AppScreen.ProcessConsumer -> {
+                                    BackHandler { currentWorksheetsScreen = AppScreen.ConsumerDetail }
+                                    if (selectedConsumer != null) {
+                                        ProcessConsumerScreen(
+                                            consumer = selectedConsumer!!,
+                                            initialResult = workResultForSelectedConsumer,
+                                            onSave = { result ->
+                                                coroutineScope.launch {
+                                                    repository.saveWorkResult(selectedConsumer!!.id, result)
+                                                    withContext(Dispatchers.Main) {
+                                                        workResultForSelectedConsumer = result
+                                                        currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                                        successMessage = "✅ Дані збережено"; showSuccessToast = true
+                                                    }
+                                                }
+                                            },
+                                            onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
+                                        )
+                                    }
+                                }
+                                AppScreen.WorkResults -> {
+                                    BackHandler { currentWorksheetsScreen = AppScreen.Worksheets }
+                                    WorkResultsScreen(onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets })
+                                }
+                                else -> {}
                             }
                         }
-                        AppScreen.WorkResults -> {
-                            BackHandler { currentWorksheetsScreen = AppScreen.Worksheets }
-                            WorkResultsScreen(onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets })
-                        }
-                        else -> {}
                     }
                 }
             }
