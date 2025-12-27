@@ -25,14 +25,10 @@ MappingOP заменяет устаревшие бумажные методы ц
 
 Текущий статус разработки и планы по внедрению функционала.
 
-### Версия на русском языке
 
 ![Дорожная Карта Проекта (RU)](assets/roadmap_ru.png)
 *(Не забудьте проверить путь к файлу: `assets/` или другая папка, куда вы загрузили картинки)*
 
----
-
-### English Version
 
 ![Project Roadmap (EN)](assets/roadmap_en.png)
 *(Please verify the file path matches your repository structure)*
