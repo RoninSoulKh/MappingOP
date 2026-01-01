@@ -110,6 +110,6 @@ com.roninsoulkh.mappingop
     └── ui/              # Jetpack Compose Screens & Components
 
 ```
-    ## 👥 Team (Команда)
+## 👥 Team (Команда)
 - **[RoninSoulKh](https://github.com/RoninSoulKh)** — Lead Developer: Architecture, Frontend, Data Processing, UI/UX design.
 - **[EmsFear](https://github.com/EmsFear)** — Backend Developer: API synchronization logic.
