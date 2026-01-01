@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first // ВАЖНЫЙ ИМПОРТ ДЛЯ ЭКСПОРТА
+import org.osmdroid.util.GeoPoint // ВАЖНЫЙ ИМПОРТ ДЛЯ КООРДИНАТ
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -155,6 +156,12 @@ fun MainScreen(
     var selectedWorksheetId by remember { mutableStateOf<String?>(null) }
     var selectedConsumer by remember { mutableStateOf<Consumer?>(null) }
     var selectedMapWorksheetId by remember { mutableStateOf<String?>(null) }
+
+    // === 🔥 НОВОЕ: СОСТОЯНИЕ КАРТЫ (Память и Цель) ===
+    var mapCenterState by remember { mutableStateOf(GeoPoint(50.0, 36.23)) }
+    var mapZoomState by remember { mutableStateOf(13.0) }
+    // Специальная переменная: если она не null, карта должна туда полететь
+    var mapCameraTarget by remember { mutableStateOf<GeoPoint?>(null) }
 
     // --- ФИКС БАГА №6 (BackHandler) ---
     BackHandler(enabled = currentTab != BottomTab.HOME || currentWorksheetsScreen != AppScreen.Worksheets) {
@@ -302,17 +309,27 @@ fun MainScreen(
                     modifier = Modifier.padding(16.dp),
                     onClick = {
                         selectedConsumer?.let { consumer ->
-                            Toast.makeText(context, "Пошук...", Toast.LENGTH_SHORT).show()
-                            val smartAddress = constructSmartAddress(consumer.rawAddress)
-                            AddressHelper.searchAddress(smartAddress) { location ->
-                                coroutineScope.launch(Dispatchers.Main) {
-                                    if (location == null) {
-                                        errorMessage = "Не знайдено!"; showErrorToast = true
-                                    } else {
-                                        consumer.latitude = location.lat
-                                        consumer.longitude = location.lng
-                                        repository.updateConsumer(consumer)
-                                        successMessage = "Знайдено!"; showSuccessToast = true
+                            // --- ЛОГИКА "ВЖУХ" (Умная камера) ---
+                            if (consumer.latitude != null && consumer.latitude != 0.0) {
+                                // 1. Если координаты есть - ставим цель и переходим на карту
+                                mapCameraTarget = GeoPoint(consumer.latitude!!, consumer.longitude!!)
+                                currentTab = BottomTab.MAP
+                                successMessage = "Перехід на карту..."
+                                showSuccessToast = true
+                            } else {
+                                // 2. Если координат нет - ищем их
+                                Toast.makeText(context, "Пошук координат...", Toast.LENGTH_SHORT).show()
+                                val smartAddress = constructSmartAddress(consumer.rawAddress)
+                                AddressHelper.searchAddress(smartAddress) { location ->
+                                    coroutineScope.launch(Dispatchers.Main) {
+                                        if (location == null) {
+                                            errorMessage = "Не знайдено!"; showErrorToast = true
+                                        } else {
+                                            consumer.latitude = location.lat
+                                            consumer.longitude = location.lng
+                                            repository.updateConsumer(consumer)
+                                            successMessage = "Знайдено! Натисніть ще раз для переходу."; showSuccessToast = true
+                                        }
                                     }
                                 }
                             }
@@ -368,6 +385,18 @@ fun MainScreen(
                             consumers = mapConsumersList,
                             totalCount = totalConsumersCount,
                             foundCount = foundCoordinatesCount,
+
+                            // 🔥 ПЕРЕДАЕМ ПАРАМЕТРЫ УМНОЙ КАМЕРЫ 🔥
+                            initialCenter = mapCenterState,
+                            initialZoom = mapZoomState,
+                            cameraTarget = mapCameraTarget,
+                            onCameraTargetSettled = { mapCameraTarget = null }, // Сброс цели
+                            onMapStateChanged = { center, zoom ->
+                                // Сохраняем состояние при скролле
+                                mapCenterState = center
+                                mapZoomState = zoom
+                            },
+
                             onWorksheetSelected = { worksheet ->
                                 selectedMapWorksheetId = worksheet.id
                                 geoService.startForWorksheet(worksheet.id)

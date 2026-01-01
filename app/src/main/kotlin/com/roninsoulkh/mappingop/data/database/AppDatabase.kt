@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.Flow
     version = 4, // 👈 ВЕРСИЯ ОБНОВЛЕНА ДО 4
     exportSchema = false
 )
-// Убедись, что WorkResultConverters у тебя существует, если нет - убери его из списка
 @TypeConverters(WorkResultConverters::class, Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun worksheetDao(): WorksheetDao

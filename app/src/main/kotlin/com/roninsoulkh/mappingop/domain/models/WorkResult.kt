@@ -57,7 +57,7 @@ enum class BuildingCondition {
     DESTROYED,        // Зруйнований
     NOT_LIVING,       // Не мешкають
     FORBIDDEN,        // Заборона
-    UNKNOWN           // Невідомо (только для внутреннего использования)
+    UNKNOWN           // Невідомо
 }
 
 // Классификатор потребителя (без Невідомо)

@@ -1,11 +1,31 @@
 package com.roninsoulkh.mappingop.data.database
 
 import androidx.room.TypeConverter
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.roninsoulkh.mappingop.domain.models.BuildingCondition
 import com.roninsoulkh.mappingop.domain.models.ConsumerType
 import com.roninsoulkh.mappingop.domain.models.WorkType
 
 class Converters {
+
+    // ============ СПИСОК ФОТО (List<String>) ============
+    // Без этого база не сможет сохранить пути к фото!
+    @TypeConverter
+    fun fromStringList(value: List<String>?): String {
+        return Gson().toJson(value ?: emptyList<String>())
+    }
+
+    @TypeConverter
+    fun toStringList(value: String?): List<String> {
+        if (value.isNullOrEmpty()) return emptyList()
+        val listType = object : TypeToken<List<String>>() {}.type
+        return try {
+            Gson().fromJson(value, listType) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 
     // ============ BuildingCondition ============
     @TypeConverter
@@ -15,7 +35,9 @@ class Converters {
 
     @TypeConverter
     fun toBuildingCondition(value: String?): BuildingCondition? {
-        return if (value == null) null else BuildingCondition.valueOf(value)
+        return if (value == null) null else try {
+            BuildingCondition.valueOf(value)
+        } catch (e: Exception) { null }
     }
 
     // ============ ConsumerType ============
@@ -26,7 +48,9 @@ class Converters {
 
     @TypeConverter
     fun toConsumerType(value: String?): ConsumerType? {
-        return if (value == null) null else ConsumerType.valueOf(value)
+        return if (value == null) null else try {
+            ConsumerType.valueOf(value)
+        } catch (e: Exception) { null }
     }
 
     // ============ WorkType ============
@@ -37,6 +61,8 @@ class Converters {
 
     @TypeConverter
     fun toWorkType(value: String?): WorkType? {
-        return if (value == null) null else WorkType.valueOf(value)
+        return if (value == null) null else try {
+            WorkType.valueOf(value)
+        } catch (e: Exception) { null }
     }
 }

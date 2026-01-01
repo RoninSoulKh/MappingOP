@@ -51,6 +51,15 @@ fun MapScreen(
     consumers: List<Consumer>,
     totalCount: Int,
     foundCount: Int,
+
+    // === НОВЫЕ ПАРАМЕТРЫ ДЛЯ КАМЕРЫ ===
+    initialCenter: GeoPoint,
+    initialZoom: Double,
+    cameraTarget: GeoPoint? = null,
+    onCameraTargetSettled: () -> Unit = {},
+    onMapStateChanged: (GeoPoint, Double) -> Unit = { _, _ -> },
+    // ==================================
+
     onWorksheetSelected: (Worksheet) -> Unit,
     onConsumerClick: (Consumer) -> Unit,
     isGeocoding: Boolean,
@@ -63,11 +72,32 @@ fun MapScreen(
 
     // Ссылка на карту и зум
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
-    var currentZoomLevel by remember { mutableStateOf(13.0) }
+    var currentZoomLevel by remember { mutableStateOf(initialZoom) } // Используем переданный зум
 
     // Состояния диалогов
     var clusterDialogList by remember { mutableStateOf<List<Consumer>?>(null) }
     var showNotFoundDialog by remember { mutableStateOf(false) }
+
+    // === ЛОГИКА КАМЕРЫ 1: Полет к цели (из карточки) ===
+    LaunchedEffect(cameraTarget) {
+        if (cameraTarget != null && mapViewRef != null) {
+            // Летим к цели с зумом 18 (близко)
+            mapViewRef?.controller?.animateTo(cameraTarget, 18.0, 1500L)
+            onCameraTargetSettled() // Сбрасываем цель, чтобы не лететь снова
+        }
+    }
+
+    // === ЛОГИКА КАМЕРЫ 2: Авто-фокус на ведомость ===
+    LaunchedEffect(consumers) {
+        val validConsumers = consumers.filter { it.latitude != null && it.latitude != 0.0 }
+        // Если есть точки, карта готова и нет принудительной цели
+        if (validConsumers.isNotEmpty() && mapViewRef != null && cameraTarget == null) {
+            val avgLat = validConsumers.map { it.latitude!! }.average()
+            val avgLon = validConsumers.map { it.longitude!! }.average()
+            // Летим в центр ведомости с зумом 14
+            mapViewRef?.controller?.animateTo(GeoPoint(avgLat, avgLon), 14.0, 1000L)
+        }
+    }
 
     // === УМНАЯ КЛАСТЕРИЗАЦИЯ ===
     val visibleMarkers = remember(consumers, currentZoomLevel, searchQuery) {
@@ -143,14 +173,23 @@ fun MapScreen(
                         isTilesScaledToDpi = true
                         minZoomLevel = 4.0
                         maxZoomLevel = 20.0
-                        controller.setZoom(13.0)
-                        controller.setCenter(GeoPoint(50.0, 36.23))
+
+                        // Устанавливаем начальную позицию из параметров
+                        controller.setZoom(initialZoom)
+                        controller.setCenter(initialCenter)
+
                         mapViewRef = this
 
                         addMapListener(object : MapListener {
-                            override fun onScroll(event: ScrollEvent?): Boolean = false
+                            override fun onScroll(event: ScrollEvent?): Boolean {
+                                // Сохраняем новую позицию
+                                onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
+                                return false
+                            }
                             override fun onZoom(event: ZoomEvent?): Boolean {
                                 currentZoomLevel = this@apply.zoomLevelDouble
+                                // Сохраняем новый зум
+                                onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
                                 return true
                             }
                         })
@@ -172,7 +211,7 @@ fun MapScreen(
                         marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
 
                         if (group.consumers.size > 1) {
-                            // КЛАСТЕР
+                            // КЛАСТЕР (ЗДЕСЬ ТЕПЕРЬ ИСПОЛЬЗУЕТСЯ ТВОЯ КАРТИНКА)
                             marker.icon = createBlueClusterIcon(context, group.consumers.size)
                             marker.title = "Об'єктів: ${group.consumers.size}"
 
@@ -365,31 +404,39 @@ private fun enableMyLocation(mapView: MapView, context: Context) {
     mapView.invalidate()
 }
 
+// 🔥 Твоя функция с картинкой (ОСТАВЛЕНО БЕЗ ИЗМЕНЕНИЙ)
 fun createBlueClusterIcon(context: Context, count: Int): Drawable {
-    val size = 52
     val density = context.resources.displayMetrics.density
-    val sizePx = (size * density).toInt()
+    val sizePx = (52 * density).toInt() // Размер иконки 52dp
 
+    // 1. Создаем холст
     val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
-    val paintCircle = Paint().apply {
-        color = android.graphics.Color.parseColor("#1976D2")
-        isAntiAlias = true
-        style = Paint.Style.FILL
-    }
-    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paintCircle)
+    // 2. Загружаем твою картинку ic_cluster_bg
+    val drawable = ContextCompat.getDrawable(context, R.drawable.ic_cluster_bg)
 
+    // Если картинка нашлась - рисуем её
+    drawable?.let {
+        it.setBounds(0, 0, sizePx, sizePx)
+        it.draw(canvas)
+    }
+
+    // 3. Рисуем цифру поверх картинки
     val paintText = Paint().apply {
         color = android.graphics.Color.WHITE
         textSize = 18f * density
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
         typeface = android.graphics.Typeface.DEFAULT_BOLD
+        // Добавил небольшую тень тексту для читаемости
+        setShadowLayer(3f, 0f, 0f, android.graphics.Color.DKGRAY)
     }
 
+    // Вычисляем центр для текста
     val xPos = sizePx / 2f
     val yPos = (sizePx / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
+
     canvas.drawText(count.toString(), xPos, yPos, paintText)
 
     return BitmapDrawable(context.resources, bitmap)
