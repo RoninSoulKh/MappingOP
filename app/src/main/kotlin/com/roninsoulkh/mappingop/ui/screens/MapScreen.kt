@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,15 +18,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
@@ -44,6 +46,13 @@ import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import kotlin.math.abs
 
+// --- DNA COLORS ---
+private val CardColor = Color(0xFF1E293B)
+private val CyanAction = Color(0xFF06B6D4)
+private val TextWhite = Color(0xFFF8FAFC)
+private val TextSlate = Color(0xFF94A3B8)
+private val ErrorRed = Color(0xFFEF4444)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
@@ -52,13 +61,12 @@ fun MapScreen(
     totalCount: Int,
     foundCount: Int,
 
-    // === НОВЫЕ ПАРАМЕТРЫ ДЛЯ КАМЕРЫ ===
+    // === ПАРАМЕТРЫ КАМЕРЫ ===
     initialCenter: GeoPoint,
     initialZoom: Double,
     cameraTarget: GeoPoint? = null,
     onCameraTargetSettled: () -> Unit = {},
     onMapStateChanged: (GeoPoint, Double) -> Unit = { _, _ -> },
-    // ==================================
 
     onWorksheetSelected: (Worksheet) -> Unit,
     onConsumerClick: (Consumer) -> Unit,
@@ -72,36 +80,31 @@ fun MapScreen(
 
     // Ссылка на карту и зум
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
-    var currentZoomLevel by remember { mutableStateOf(initialZoom) } // Используем переданный зум
+    var currentZoomLevel by remember { mutableStateOf(initialZoom) }
 
     // Состояния диалогов
     var clusterDialogList by remember { mutableStateOf<List<Consumer>?>(null) }
     var showNotFoundDialog by remember { mutableStateOf(false) }
 
-    // === ЛОГИКА КАМЕРЫ 1: Полет к цели (из карточки) ===
+    // === ЛОГИКА КАМЕРЫ ===
     LaunchedEffect(cameraTarget) {
         if (cameraTarget != null && mapViewRef != null) {
-            // Летим к цели с зумом 18 (близко)
             mapViewRef?.controller?.animateTo(cameraTarget, 18.0, 1500L)
-            onCameraTargetSettled() // Сбрасываем цель, чтобы не лететь снова
+            onCameraTargetSettled()
         }
     }
 
-    // === ЛОГИКА КАМЕРЫ 2: Авто-фокус на ведомость ===
     LaunchedEffect(consumers) {
         val validConsumers = consumers.filter { it.latitude != null && it.latitude != 0.0 }
-        // Если есть точки, карта готова и нет принудительной цели
         if (validConsumers.isNotEmpty() && mapViewRef != null && cameraTarget == null) {
             val avgLat = validConsumers.map { it.latitude!! }.average()
             val avgLon = validConsumers.map { it.longitude!! }.average()
-            // Летим в центр ведомости с зумом 14
             mapViewRef?.controller?.animateTo(GeoPoint(avgLat, avgLon), 14.0, 1000L)
         }
     }
 
-    // === УМНАЯ КЛАСТЕРИЗАЦИЯ ===
+    // === КЛАСТЕРИЗАЦИЯ ===
     val visibleMarkers = remember(consumers, currentZoomLevel, searchQuery) {
-        // 1. Фильтрация поиска
         val filtered = if (searchQuery.isEmpty()) {
             consumers.filter { it.latitude != null && it.latitude != 0.0 }
         } else {
@@ -113,7 +116,6 @@ fun MapScreen(
             }
         }
 
-        // 2. Алгоритм группировки
         val gridDistance = when {
             currentZoomLevel >= 18.5 -> 0.00001
             currentZoomLevel >= 16.0 -> 0.0005
@@ -132,270 +134,375 @@ fun MapScreen(
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        mapViewRef?.overlayManager?.forEach {
-                            if (it is MyLocationNewOverlay) {
-                                it.enableFollowLocation()
-                                mapViewRef?.controller?.setZoom(17.0)
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        // 1. КАРТА (OSM)
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                MapView(ctx).apply {
+                    setTileSource(TileSourceFactory.MAPNIK)
+                    setMultiTouchControls(true)
+                    isTilesScaledToDpi = true
+                    minZoomLevel = 4.0
+                    maxZoomLevel = 20.0
+                    setBuiltInZoomControls(false)
+
+                    controller.setZoom(initialZoom)
+                    controller.setCenter(initialCenter)
+
+                    mapViewRef = this
+
+                    addMapListener(object : MapListener {
+                        override fun onScroll(event: ScrollEvent?): Boolean {
+                            onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
+                            return false
+                        }
+                        override fun onZoom(event: ZoomEvent?): Boolean {
+                            currentZoomLevel = this@apply.zoomLevelDouble
+                            onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
+                            return true
+                        }
+                    })
+                }
+            },
+            update = { mapView ->
+                val myLocationOverlay = mapView.overlays.find { it is MyLocationNewOverlay }
+                mapView.overlays.clear()
+
+                if (myLocationOverlay != null) {
+                    mapView.overlays.add(myLocationOverlay)
+                } else if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    enableMyLocation(mapView, context)
+                }
+
+                visibleMarkers.forEach { group ->
+                    val marker = Marker(mapView)
+                    marker.position = GeoPoint(group.lat, group.lon)
+                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+
+                    if (group.consumers.size > 1) {
+                        marker.icon = createBlueClusterIcon(context, group.consumers.size)
+                        marker.title = "Об'єктів: ${group.consumers.size}"
+                        marker.setOnMarkerClickListener { _, map ->
+                            if (map != null && map.zoomLevelDouble < 17.5) {
+                                map.controller.animateTo(marker.position, map.zoomLevelDouble + 2.0, 1000L)
+                            } else {
+                                clusterDialogList = group.consumers
                             }
+                            true
                         }
                     } else {
-                        locationPermissionLauncher.launch(arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION
-                        ))
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.padding(bottom = 4.dp)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.baseline_my_location_24),
-                    contentDescription = "Моя локация",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
+                        val consumer = group.consumers.first()
+                        val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
+                        val iconDrawable = ContextCompat.getDrawable(context, iconRes)
+                        if (iconDrawable != null) marker.icon = iconDrawable
 
-            // 1. КАРТА
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    MapView(ctx).apply {
-                        setTileSource(TileSourceFactory.MAPNIK)
-                        setMultiTouchControls(true)
-                        isTilesScaledToDpi = true
-                        minZoomLevel = 4.0
-                        maxZoomLevel = 20.0
-
-                        // Устанавливаем начальную позицию из параметров
-                        controller.setZoom(initialZoom)
-                        controller.setCenter(initialCenter)
-
-                        mapViewRef = this
-
-                        addMapListener(object : MapListener {
-                            override fun onScroll(event: ScrollEvent?): Boolean {
-                                // Сохраняем новую позицию
-                                onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
-                                return false
-                            }
-                            override fun onZoom(event: ZoomEvent?): Boolean {
-                                currentZoomLevel = this@apply.zoomLevelDouble
-                                // Сохраняем новый зум
-                                onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
-                                return true
-                            }
-                        })
-                    }
-                },
-                update = { mapView ->
-                    val myLocationOverlay = mapView.overlays.find { it is MyLocationNewOverlay }
-                    mapView.overlays.clear()
-
-                    if (myLocationOverlay != null) {
-                        mapView.overlays.add(myLocationOverlay)
-                    } else if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        enableMyLocation(mapView, context)
-                    }
-
-                    visibleMarkers.forEach { group ->
-                        val marker = Marker(mapView)
-                        marker.position = GeoPoint(group.lat, group.lon)
-                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-
-                        if (group.consumers.size > 1) {
-                            // КЛАСТЕР (ЗДЕСЬ ТЕПЕРЬ ИСПОЛЬЗУЕТСЯ ТВОЯ КАРТИНКА)
-                            marker.icon = createBlueClusterIcon(context, group.consumers.size)
-                            marker.title = "Об'єктів: ${group.consumers.size}"
-
-                            marker.setOnMarkerClickListener { _, map ->
-                                if (map != null && map.zoomLevelDouble < 17.5) {
-                                    map.controller.animateTo(marker.position, map.zoomLevelDouble + 2.0, 1000L)
-                                } else {
-                                    clusterDialogList = group.consumers
-                                }
-                                true
-                            }
-                        } else {
-                            // ОДИНОЧНЫЙ МАРКЕР
-                            val consumer = group.consumers.first()
-                            val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
-                            val iconDrawable = ContextCompat.getDrawable(context, iconRes)
-                            if (iconDrawable != null) marker.icon = iconDrawable
-
-                            marker.title = consumer.rawAddress
-                            marker.subDescription = "ОР: ${consumer.orNumber}"
-
-                            marker.setOnMarkerClickListener { _, _ ->
-                                onConsumerClick(consumer)
-                                true
-                            }
+                        marker.title = consumer.rawAddress
+                        marker.subDescription = "ОР: ${consumer.orNumber}"
+                        marker.setOnMarkerClickListener { _, _ ->
+                            onConsumerClick(consumer)
+                            true
                         }
-                        mapView.overlays.add(marker)
                     }
-                    mapView.invalidate()
+                    mapView.overlays.add(marker)
                 }
-            )
+                mapView.invalidate()
+            }
+        )
 
-            // 2. ВЕРХНЯЯ ПАНЕЛЬ
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(top = 4.dp, start = 16.dp, end = 16.dp)
+        // 2. ПЛАВАЮЩИЙ ПОИСК (ВЕРХ)
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .statusBarsPadding() // 🔥 ИСПРАВЛЕНИЕ 1: Отступ от статус-бара
+                .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Surface(
+                color = CardColor,
+                shape = RoundedCornerShape(12.dp),
+                shadowElevation = 8.dp,
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SearchBar(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onSearch = { },
-                        active = false,
-                        onActiveChange = { },
-                        placeholder = { Text("Пошук (ОР, адреса)", style = MaterialTheme.typography.bodyMedium) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                    ) {}
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = TextSlate,
+                        modifier = Modifier.padding(start = 16.dp)
+                    )
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Пошук (ОР, адреса)", color = TextSlate.copy(alpha = 0.7f)) },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            cursorColor = CyanAction,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite
+                        ),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
 
-                    Box(
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        FilledTonalButton(
-                            onClick = { expanded = true },
-                            contentPadding = PaddingValues(0.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(Icons.Default.Menu, contentDescription = "Меню")
+                    Box {
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Меню", tint = CyanAction)
                         }
 
                         DropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false },
-                            offset = androidx.compose.ui.unit.DpOffset(x = 0.dp, y = 8.dp)
+                            modifier = Modifier.background(CardColor)
                         ) {
                             worksheets.forEach { ws ->
                                 DropdownMenuItem(
-                                    text = { Text(ws.fileName) },
+                                    text = { Text(ws.fileName, color = TextWhite) },
                                     onClick = {
                                         selectedWorksheetName = ws.fileName
                                         onWorksheetSelected(ws)
                                         expanded = false
-                                    }
+                                    },
+                                    colors = MenuDefaults.itemColors(textColor = TextWhite)
                                 )
                             }
                         }
                     }
                 }
+            }
 
-                if (totalCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .clickable { showNotFoundDialog = true }
+            if (totalCount > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = CardColor.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .clickable { showNotFoundDialog = true }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Filled.FilterList,
+                            contentDescription = null,
+                            tint = CyanAction,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "$foundCount з $totalCount знайдено",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = TextWhite
                         )
                     }
                 }
             }
+        }
 
-            // 3. ПРОГРЕСС БАР
-            if (isGeocoding) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
-                        .padding(24.dp)
+        // 3. ПАНЕЛЬ УПРАВЛЕНИЯ (НИЗ-ПРАВО)
+        MapControlsColumn(
+            onZoomIn = { mapViewRef?.controller?.zoomIn() },
+            onZoomOut = { mapViewRef?.controller?.zoomOut() },
+            onMyLocation = {
+                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    mapViewRef?.overlayManager?.forEach {
+                        if (it is MyLocationNewOverlay) {
+                            it.enableFollowLocation()
+                            mapViewRef?.controller?.setZoom(17.0)
+                        }
+                    }
+                } else {
+                    locationPermissionLauncher.launch(arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ))
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 32.dp, end = 16.dp)
+        )
+
+        // 4. ПРОГРЕСС ГЕОКОДИНГА
+        if (isGeocoding) {
+            Surface(
+                modifier = Modifier.align(Alignment.Center).wrapContentSize(),
+                shape = RoundedCornerShape(16.dp),
+                color = CardColor,
+                shadowElevation = 8.dp,
+                border = BorderStroke(1.dp, TextWhite.copy(alpha = 0.1f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Пошук координат...")
-                        progress?.let { (curr, total) -> Text("$curr з $total") }
+                    CircularProgressIndicator(modifier = Modifier.size(48.dp), color = CyanAction, strokeWidth = 4.dp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Пошук координат...", style = MaterialTheme.typography.titleMedium, color = TextWhite, fontWeight = FontWeight.Bold)
+                    if (progress != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Опрацьовано: ${progress.first} з ${progress.second}", style = MaterialTheme.typography.bodyMedium, color = TextSlate)
                     }
                 }
             }
+        }
 
-            // 4. ДИАЛОГ КЛАСТЕРА
-            if (clusterDialogList != null) {
-                AlertDialog(
-                    onDismissRequest = { clusterDialogList = null },
-                    title = { Text("За цією локацією (${clusterDialogList!!.size}):") },
-                    text = {
-                        val safeList = clusterDialogList ?: emptyList()
-                        LazyColumn(modifier = Modifier.height(300.dp)) {
-                            items(safeList) { consumer ->
-                                ListItem(
-                                    headlineContent = { Text(consumer.rawAddress, style = MaterialTheme.typography.bodySmall) },
-                                    supportingContent = { Text(consumer.name, style = MaterialTheme.typography.labelSmall) },
-                                    leadingContent = {
-                                        val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
-                                        Icon(painter = painterResource(iconRes), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
-                                    },
-                                    modifier = Modifier.clickable {
-                                        clusterDialogList = null
-                                        onConsumerClick(consumer)
+        // 5. ДИАЛОГИ КЛАСТЕРА
+        if (clusterDialogList != null) {
+            AlertDialog(
+                onDismissRequest = { clusterDialogList = null },
+                containerColor = CardColor,
+                titleContentColor = TextWhite,
+                textContentColor = TextWhite,
+                title = { Text("За цією локацією (${clusterDialogList!!.size}):") },
+                text = {
+                    val safeList = clusterDialogList ?: emptyList()
+                    LazyColumn(modifier = Modifier.height(300.dp)) {
+                        items(safeList) { consumer ->
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            clusterDialogList = null
+                                            onConsumerClick(consumer)
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
+                                    Icon(painter = painterResource(iconRes), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(32.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(consumer.rawAddress, style = MaterialTheme.typography.bodyMedium, color = TextWhite)
+                                        Text(consumer.name, style = MaterialTheme.typography.labelSmall, color = TextSlate)
                                     }
-                                )
-                                Divider()
+                                }
+                                Divider(color = TextSlate.copy(alpha = 0.2f))
                             }
                         }
-                    },
-                    confirmButton = { TextButton(onClick = { clusterDialogList = null }) { Text("Закрити") } }
-                )
-            }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { clusterDialogList = null }) { Text("Закрити", color = CyanAction, fontWeight = FontWeight.Bold) } }
+            )
+        }
 
-            // 5. ДИАЛОГ "НЕ ЗНАЙДЕНО"
-            if (showNotFoundDialog) {
-                val notFoundList = consumers.filter { it.latitude == null || it.latitude == 0.0 }
-                AlertDialog(
-                    onDismissRequest = { showNotFoundDialog = false },
-                    title = { Text("Не знайдено (${notFoundList.size})") },
-                    text = {
-                        LazyColumn(modifier = Modifier.height(300.dp)) {
-                            items(notFoundList) { consumer ->
-                                ListItem(
-                                    headlineContent = { Text(consumer.rawAddress, style = MaterialTheme.typography.bodySmall) },
-                                    supportingContent = { Text("Координати: 0.0, 0.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) },
-                                    modifier = Modifier.clickable {
-                                        showNotFoundDialog = false
-                                        onConsumerClick(consumer)
+        // 6. 🔥 ДИАЛОГ "ЗВІТ ПОШУКУ" (НОВЫЙ СТИЛЬ)
+        if (showNotFoundDialog) {
+            val notFoundList = consumers.filter { it.latitude == null || it.latitude == 0.0 }
+            AlertDialog(
+                onDismissRequest = { showNotFoundDialog = false },
+                containerColor = CardColor, // Темный фон
+                titleContentColor = TextWhite, // Белый заголовок
+                textContentColor = TextWhite, // Белый текст
+                title = {
+                    Column {
+                        Text("Звіт пошуку", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Не знайдено адрес: ${notFoundList.size}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSlate
+                        )
+                    }
+                },
+                text = {
+                    LazyColumn(modifier = Modifier.height(300.dp)) {
+                        items(notFoundList) { consumer ->
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showNotFoundDialog = false
+                                            onConsumerClick(consumer)
+                                        }
+                                        .padding(vertical = 12.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            consumer.rawAddress,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = TextWhite
+                                        )
+                                        Text(
+                                            "Координати відсутні",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ErrorRed.copy(alpha = 0.8f)
+                                        )
                                     }
-                                )
-                                Divider()
+                                }
+                                Divider(color = TextSlate.copy(alpha = 0.2f))
                             }
                         }
-                    },
-                    confirmButton = { TextButton(onClick = { showNotFoundDialog = false }) { Text("Закрити") } }
-                )
-            }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showNotFoundDialog = false }) {
+                        Text("OK", color = CyanAction, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
     }
 }
 
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+
+@Composable
+fun MapControlsColumn(
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onMyLocation: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.wrapContentSize(),
+        shape = RoundedCornerShape(12.dp),
+        color = CardColor,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, TextWhite.copy(alpha = 0.1f))
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Кнопка "+"
+            IconButton(onClick = onZoomIn, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Add, contentDescription = "Zoom In", tint = TextWhite)
+            }
+
+            Divider(color = TextWhite.copy(alpha = 0.1f), thickness = 1.dp, modifier = Modifier.width(32.dp))
+
+            // Кнопка "-"
+            IconButton(onClick = onZoomOut, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Remove, contentDescription = "Zoom Out", tint = TextWhite)
+            }
+
+            Divider(color = TextWhite.copy(alpha = 0.1f), thickness = 1.dp, modifier = Modifier.width(32.dp))
+
+            // 🔥 ИСПРАВЛЕНИЕ 2: Уменьшенная иконка прицела
+            IconButton(onClick = onMyLocation, modifier = Modifier.size(48.dp)) {
+                Icon(
+                    painter = painterResource(id = R.drawable.baseline_my_location_24),
+                    contentDescription = "My Location",
+                    tint = CyanAction,
+                    modifier = Modifier.size(24.dp) // Уменьшили размер иконки внутри кнопки
+                )
+            }
+        }
+    }
+}
 
 private fun enableMyLocation(mapView: MapView, context: Context) {
     val locationOverlay = MyLocationNewOverlay(GpsMyLocationProvider(context), mapView)
@@ -404,36 +511,29 @@ private fun enableMyLocation(mapView: MapView, context: Context) {
     mapView.invalidate()
 }
 
-// 🔥 Твоя функция с картинкой (ОСТАВЛЕНО БЕЗ ИЗМЕНЕНИЙ)
 fun createBlueClusterIcon(context: Context, count: Int): Drawable {
     val density = context.resources.displayMetrics.density
-    val sizePx = (52 * density).toInt() // Размер иконки 52dp
+    val sizePx = (52 * density).toInt()
 
-    // 1. Создаем холст
     val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
-    // 2. Загружаем твою картинку ic_cluster_bg
     val drawable = ContextCompat.getDrawable(context, R.drawable.ic_cluster_bg)
 
-    // Если картинка нашлась - рисуем её
     drawable?.let {
         it.setBounds(0, 0, sizePx, sizePx)
         it.draw(canvas)
     }
 
-    // 3. Рисуем цифру поверх картинки
     val paintText = Paint().apply {
         color = android.graphics.Color.WHITE
         textSize = 18f * density
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
         typeface = android.graphics.Typeface.DEFAULT_BOLD
-        // Добавил небольшую тень тексту для читаемости
         setShadowLayer(3f, 0f, 0f, android.graphics.Color.DKGRAY)
     }
 
-    // Вычисляем центр для текста
     val xPos = sizePx / 2f
     val yPos = (sizePx / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
 

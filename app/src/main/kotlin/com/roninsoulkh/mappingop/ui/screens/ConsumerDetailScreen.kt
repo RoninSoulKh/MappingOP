@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.roninsoulkh.mappingop.domain.models.*
+import com.roninsoulkh.mappingop.ui.components.MappingCard
+import com.roninsoulkh.mappingop.ui.components.MappingCustomDialog
+import com.roninsoulkh.mappingop.ui.components.MappingGradientButton
+import com.roninsoulkh.mappingop.ui.theme.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -38,148 +42,386 @@ fun ConsumerDetailScreen(
     workResult: WorkResult?,
     onBackClick: () -> Unit,
     onProcessClick: () -> Unit,
-    onManualLocationClick: () -> Unit // <--- Новый параметр для ручной карты
+    onManualLocationClick: () -> Unit,
+    onMapClick: () -> Unit
 ) {
     var showResultDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Деталі споживача") },
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "Деталі споживача",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Filled.ArrowBack, "Назад")
                     }
                 },
                 actions = {
+                    IconButton(onClick = onMapClick) {
+                        Icon(
+                            imageVector = Icons.Filled.Place,
+                            contentDescription = "На карту",
+                            tint = CyanAction
+                        )
+                    }
                     if (workResult != null) {
                         IconButton(onClick = { showResultDialog = true }) {
-                            Icon(Icons.Filled.Description, "Показати результат", tint = MaterialTheme.colorScheme.primary)
+                            Icon(
+                                imageVector = Icons.Filled.History,
+                                contentDescription = "Історія",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                )
+            )
+        }
+    ) { paddingValues ->
+        // Головний контейнер Column
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(paddingValues)
+        ) {
+
+            // 1. ЗОНА СКРОЛУ (Картки інформації + Кнопка координат внизу)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp) // Уменьшили расстояние между карточками
+            ) {
+
+                // Статус
+                MappingCard {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (consumer.isProcessed) StatusGreen.copy(alpha = 0.2f)
+                                else StatusRed.copy(alpha = 0.2f)
+                            )
+                            .padding(12.dp), // Чуть меньше padding
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (consumer.isProcessed) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                                contentDescription = null,
+                                tint = if (consumer.isProcessed) StatusGreen else StatusRed
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (consumer.isProcessed) "ОПРАЦЬОВАНО" else "НЕ ОПРАЦЬОВАНО",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (consumer.isProcessed) StatusGreen else StatusRed
+                            )
                         }
                     }
                 }
-            )
-        },
-        bottomBar = {
-            BottomAppBar {
-                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
-                    Button(
-                        onClick = onProcessClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (consumer.isProcessed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+
+                // Головна інфо
+                MappingCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        // ОР
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Numbers,
+                                contentDescription = null,
+                                tint = CyanAction,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Номер ОР",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = consumer.orNumber,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 28.dp, top = 2.dp)
                         )
-                    ) {
-                        Icon(if (consumer.isProcessed) Icons.Filled.Edit else Icons.Filled.CheckCircle, null, Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (consumer.isProcessed) "Редагувати" else "Опрацювати")
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Адреса
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                imageVector = Icons.Filled.Home,
+                                contentDescription = null,
+                                tint = CyanAction,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Адреса",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = consumer.rawAddress,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Контрагент
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = null,
+                                tint = CyanAction,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Контрагент",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = consumer.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
-            }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(paddingValues).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                AssistChip(
-                    onClick = { if (workResult != null) showResultDialog = true },
-                    label = { Text(if (consumer.isProcessed) "ОПРАЦЬОВАНО" else "НЕ ОПРАЦЬОВАНО", fontSize = 12.sp) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (consumer.isProcessed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+
+                // Додаткова інфо
+                MappingCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        DetailRow(
+                            icon = Icons.Filled.Phone,
+                            label = "Телефон",
+                            value = consumer.phone ?: "не вказано"
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            // Борг
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Сума боргу",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${consumer.debtAmount ?: 0.0} грн",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if ((consumer.debtAmount ?: 0.0) > 0) StatusRed else StatusGreen
+                                )
+                            }
+
+                            // Лічильник
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Номер лічильника",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = consumer.meterNumber ?: "не вказано",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 🔥 КНОПКА ЗМІНИ КООРДИНАТ ПЕРЕНЕСЕНА СЮДИ
+                // Вона тепер частина списку і не заважає знизу
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = onManualLocationClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(45.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                     ),
-                    leadingIcon = { if (consumer.isProcessed) Icon(Icons.Filled.Check, null, Modifier.size(16.dp)) }
-                )
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EditLocation,
+                        contentDescription = null,
+                        tint = CyanAction,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Змінити координати вручну",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                // Додатковий відступ знизу, щоб кнопка не прилипала до краю
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            InfoCard(title = "Номер ОР", value = consumer.orNumber, icon = Icons.Filled.Numbers)
-            InfoCard(title = "Адреса", value = consumer.rawAddress, icon = Icons.Filled.Home)
-            InfoCard(title = "Контрагент", value = consumer.name, icon = Icons.Filled.Person)
-            InfoCard(title = "Телефон", value = consumer.phone ?: "не вказано", icon = Icons.Filled.Phone)
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                InfoCard(title = "Сума боргу", value = "${consumer.debtAmount ?: 0.0} грн", icon = Icons.Filled.AttachMoney, modifier = Modifier.weight(1f))
-                InfoCard(title = "Номер лічильника", value = consumer.meterNumber ?: "не вказано", icon = Icons.Filled.Speed, modifier = Modifier.weight(1f))
-            }
-
-            // --- НОВАЯ КНОПКА РУЧНОЙ КОРРЕКЦИИ ---
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onManualLocationClick,
+            // 🔥 2. КОМПАКТНА ПАНЕЛЬ ЗНИЗУ (Тільки одна кнопка)
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
             ) {
-                Icon(Icons.Filled.EditLocation, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Змінити координати вручну")
+                Box(
+                    modifier = Modifier
+                        .padding(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 0.dp)
+                        .navigationBarsPadding()
+                ) {
+                    MappingGradientButton(
+                        text = if (consumer.isProcessed) "РЕДАГУВАТИ" else "ОПРАЦЮВАТИ",
+                        icon = if (consumer.isProcessed) Icons.Filled.Edit else Icons.Filled.CheckCircle,
+                        onClick = onProcessClick
+                    )
+                }
             }
         }
     }
 
+    // --- ДІАЛОГ РЕЗУЛЬТАТУ ---
     if (showResultDialog && workResult != null) {
-        AlertDialog(
-            onDismissRequest = { showResultDialog = false },
-            icon = { Icon(Icons.Filled.Description, null) },
-            title = { Text("Результат відпрацювання") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        MappingCustomDialog(
+            title = "Результат відпрацювання",
+            onDismiss = { showResultDialog = false }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Дата: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(workResult.processedAt))}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ResultRow("Тип:", workResult.workType?.let { getWorkTypeText(it) } ?: "-")
+                ResultRow("Стан:", workResult.buildingCondition?.let { getBuildingConditionText(it) } ?: "-")
+                ResultRow("Лічильник:", workResult.meterReading?.toString() ?: "-")
+
+                if (!workResult.newPhone.isNullOrEmpty()) {
+                    ResultRow("Новий телефон:", workResult.newPhone)
+                }
+                if (!workResult.comment.isNullOrEmpty()) {
+                    ResultRow("Коментар:", workResult.comment)
+                }
+
+                if (workResult.photos.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Дата: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(workResult.processedAt))}",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Медіа файли (${workResult.photos.size}):",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
                     )
-                    Divider()
 
-                    ResultRow("Тип:", workResult.workType?.let { getWorkTypeText(it) } ?: "-")
-                    ResultRow("Стан:", workResult.buildingCondition?.let { getBuildingConditionText(it) } ?: "-")
-                    ResultRow("Лічильник:", workResult.meterReading?.toString() ?: "-")
-
-                    if (!workResult.newPhone.isNullOrEmpty()) ResultRow("Новий телефон:", workResult.newPhone)
-                    if (!workResult.comment.isNullOrEmpty()) ResultRow("Коментар:", workResult.comment)
-
-                    // ГАЛЕРЕЯ
-                    if (workResult.photos.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Медіа файли (${workResult.photos.size}):", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text("(Натисніть для перегляду)", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
-
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxWidth().height(80.dp)
-                        ) {
-                            items(workResult.photos) { path ->
-                                val isVideo = path.endsWith(".mp4", ignoreCase = true)
-                                Box(
-                                    modifier = Modifier
-                                        .size(80.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .clickable {
-                                            openMediaFile(context, path)
-                                        }
-                                ) {
-                                    if (isVideo) {
-                                        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Filled.PlayCircle, null, tint = Color.White)
-                                        }
-                                    } else {
-                                        Image(
-                                            painter = rememberAsyncImagePainter(model = File(path)),
-                                            contentDescription = null,
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    }
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .padding(top = 8.dp)
+                    ) {
+                        items(workResult.photos) { path ->
+                            val isVideo = path.endsWith(".mp4", ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { openMediaFile(context, path) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isVideo) {
+                                    Icon(Icons.Filled.PlayCircle, null, tint = Color.White)
+                                } else {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(model = File(path)),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
                                 }
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showResultDialog = false }) { Text("Закрити") }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                TextButton(
+                    onClick = { showResultDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Закрити", color = CyanAction, fontWeight = FontWeight.Bold)
+                }
             }
+        }
+    }
+}
+
+// --- ДОПОМІЖНІ КОМПОНЕНТИ ---
+
+@Composable
+fun DetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CyanAction,
+            modifier = Modifier.size(20.dp)
         )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
     }
 }
 
@@ -201,24 +443,22 @@ fun openMediaFile(context: Context, path: String) {
 }
 
 @Composable
-fun InfoCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
-    Card(modifier = modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(imageVector = icon, contentDescription = title, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(text = title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
-            }
-        }
-    }
-}
-
-@Composable
 fun ResultRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        Text(value, fontSize = 14.sp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

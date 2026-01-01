@@ -12,6 +12,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,8 +26,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -42,13 +48,17 @@ import com.roninsoulkh.mappingop.data.repository.AppRepository
 import com.roninsoulkh.mappingop.utils.AddressHelper
 import com.roninsoulkh.mappingop.utils.SettingsManager
 import com.roninsoulkh.mappingop.presentation.viewmodels.BatchGeocodingService
+import com.roninsoulkh.mappingop.ui.components.*
+import com.roninsoulkh.mappingop.ui.theme.CyanAction
+import com.roninsoulkh.mappingop.ui.theme.StatusGreen
+import com.roninsoulkh.mappingop.ui.theme.StatusRed
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.first // ВАЖНЫЙ ИМПОРТ ДЛЯ ЭКСПОРТА
-import org.osmdroid.util.GeoPoint // ВАЖНЫЙ ИМПОРТ ДЛЯ КООРДИНАТ
+import kotlinx.coroutines.flow.first
+import org.osmdroid.util.GeoPoint
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -100,7 +110,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- УМНЫЙ СБОРЩИК АДРЕСА ---
 fun constructSmartAddress(raw: String): String {
     val parts = raw.split(",").map { it.trim() }
 
@@ -157,16 +166,15 @@ fun MainScreen(
     var selectedConsumer by remember { mutableStateOf<Consumer?>(null) }
     var selectedMapWorksheetId by remember { mutableStateOf<String?>(null) }
 
-    // === 🔥 НОВОЕ: СОСТОЯНИЕ КАРТЫ (Память и Цель) ===
     var mapCenterState by remember { mutableStateOf(GeoPoint(50.0, 36.23)) }
     var mapZoomState by remember { mutableStateOf(13.0) }
-    // Специальная переменная: если она не null, карта должна туда полететь
     var mapCameraTarget by remember { mutableStateOf<GeoPoint?>(null) }
 
-    // --- ФИКС БАГА №6 (BackHandler) ---
+    var notificationMessage by remember { mutableStateOf<String?>(null) }
+    var notificationColor by remember { mutableStateOf(StatusGreen) }
+
     BackHandler(enabled = currentTab != BottomTab.HOME || currentWorksheetsScreen != AppScreen.Worksheets) {
-        if (currentTab == BottomTab.LIST) {
-            // Если мы внутри вкладки "Ведомости"
+        if (currentTab == BottomTab.TASKS) {
             when (currentWorksheetsScreen) {
                 is AppScreen.EditLocation,
                 AppScreen.ProcessConsumer -> currentWorksheetsScreen = AppScreen.ConsumerDetail
@@ -178,11 +186,10 @@ fun MainScreen(
                     }
                 }
                 AppScreen.ConsumerList -> currentWorksheetsScreen = AppScreen.Worksheets
-                AppScreen.WorkResults -> currentWorksheetsScreen = AppScreen.Worksheets // Возврат из результатов
-                else -> currentTab = BottomTab.HOME // Если мы в списке ведомостей - выходим на главную
+                AppScreen.WorkResults -> currentWorksheetsScreen = AppScreen.Worksheets
+                else -> currentTab = BottomTab.HOME
             }
         } else {
-            // Если мы на карте или в профиле - возвращаемся на главную
             currentTab = BottomTab.HOME
         }
     }
@@ -208,14 +215,6 @@ fun MainScreen(
     val context = LocalContext.current
     var launchImport by remember { mutableStateOf(false) }
 
-    var showSuccessToast by remember { mutableStateOf(false) }
-    var successMessage by remember { mutableStateOf("") }
-    var showErrorToast by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
-
-    LaunchedEffect(showSuccessToast) { if (showSuccessToast) { Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show(); showSuccessToast = false } }
-    LaunchedEffect(showErrorToast) { if (showErrorToast) { Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show(); showErrorToast = false } }
-
     var worksheets by remember { mutableStateOf<List<Worksheet>>(emptyList()) }
     LaunchedEffect(Unit) { repository.getAllWorksheetsFlow().collect { worksheets = it } }
 
@@ -240,14 +239,20 @@ fun MainScreen(
                         val consumers = ExcelParser().parseWorkbook(inputStream, worksheetId)
                         if (consumers.isNotEmpty()) {
                             repository.addWorksheet(fileName, consumers)
-                            successMessage = "Файл завантажено."; showSuccessToast = true
-                            currentTab = BottomTab.LIST
+                            notificationMessage = "Файл успішно завантажено"
+                            notificationColor = StatusGreen
+
+                            currentTab = BottomTab.TASKS
                             currentWorksheetsScreen = AppScreen.Worksheets
                         } else {
-                            errorMessage = "Файл пустий"; showErrorToast = true
+                            notificationMessage = "Файл пустий або пошкоджений"
+                            notificationColor = StatusRed
                         }
                     }
-                }.onFailure { errorMessage = "Помилка: ${it.message}"; showErrorToast = true }
+                }.onFailure {
+                    notificationMessage = "Помилка: ${it.message}"
+                    notificationColor = StatusRed
+                }
             }
         }
         launchImport = false
@@ -279,252 +284,345 @@ fun MainScreen(
         )
     }
 
-    Scaffold(
-        floatingActionButtonPosition = FabPosition.Start,
-        bottomBar = {
-            if (currentTab != BottomTab.LIST || (currentWorksheetsScreen != AppScreen.ConsumerDetail && currentWorksheetsScreen != AppScreen.ProcessConsumer && currentWorksheetsScreen !is AppScreen.EditLocation)) {
-                NavigationBar {
-                    BottomTab.values().forEach { tab ->
-                        NavigationBarItem(
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
-                            selected = currentTab == tab,
-                            onClick = {
-                                // --- ФИКС БАГА №2 ---
-                                if (tab == BottomTab.LIST) {
-                                    currentWorksheetsScreen = AppScreen.Worksheets
-                                    selectedConsumer = null
-                                    isNavigatedFromMap = false
-                                }
-                                currentTab = tab
-                            }
-                        )
-                    }
-                }
-            }
-        },
-        floatingActionButton = {
-            if (currentTab == BottomTab.LIST && currentWorksheetsScreen == AppScreen.ConsumerDetail) {
-                FloatingActionButton(
-                    modifier = Modifier.padding(16.dp),
-                    onClick = {
-                        selectedConsumer?.let { consumer ->
-                            // --- ЛОГИКА "ВЖУХ" (Умная камера) ---
-                            if (consumer.latitude != null && consumer.latitude != 0.0) {
-                                // 1. Если координаты есть - ставим цель и переходим на карту
-                                mapCameraTarget = GeoPoint(consumer.latitude!!, consumer.longitude!!)
-                                currentTab = BottomTab.MAP
-                                successMessage = "Перехід на карту..."
-                                showSuccessToast = true
-                            } else {
-                                // 2. Если координат нет - ищем их
-                                Toast.makeText(context, "Пошук координат...", Toast.LENGTH_SHORT).show()
-                                val smartAddress = constructSmartAddress(consumer.rawAddress)
-                                AddressHelper.searchAddress(smartAddress) { location ->
-                                    coroutineScope.launch(Dispatchers.Main) {
-                                        if (location == null) {
-                                            errorMessage = "Не знайдено!"; showErrorToast = true
-                                        } else {
-                                            consumer.latitude = location.lat
-                                            consumer.longitude = location.lng
-                                            repository.updateConsumer(consumer)
-                                            successMessage = "Знайдено! Натисніть ще раз для переходу."; showSuccessToast = true
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ) { Icon(Icons.Filled.LocationSearching, contentDescription = null) }
-            }
-        }
-    ) { paddingValues ->
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = paddingValues.calculateBottomPadding())
-        ) {
-            AnimatedContent(targetState = currentTab, label = "TabAnim") { targetTab ->
-                when (targetTab) {
-                    BottomTab.HOME -> {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        Scaffold(
+            floatingActionButtonPosition = FabPosition.Start,
+            bottomBar = {
+                if (currentTab != BottomTab.TASKS || (currentWorksheetsScreen != AppScreen.ConsumerDetail && currentWorksheetsScreen != AppScreen.ProcessConsumer && currentWorksheetsScreen !is AppScreen.EditLocation)) {
+
+                    // 🔥 ОБНОВЛЕННАЯ ПАНЕЛЬ (Compact & High Contrast)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().shadow(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 8.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                                .navigationBarsPadding(),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Mapping OP", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.height(48.dp))
-                            Button(
-                                onClick = { launchImport = true },
-                                modifier = Modifier.fillMaxWidth(0.7f).height(56.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Завантажити Excel", fontSize = 18.sp)
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    currentTab = BottomTab.LIST
-                                    currentWorksheetsScreen = AppScreen.WorkResults
-                                },
-                                modifier = Modifier.fillMaxWidth(0.7f).height(56.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.List, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Звіти та Експорт", fontSize = 18.sp)
+                            BottomTab.values().forEach { tab ->
+                                val isSelected = currentTab == tab
+
+                                // Цвета для активного/неактивного состояния
+                                val iconColor = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                                val textColor = if (isSelected) CyanAction else MaterialTheme.colorScheme.onSurfaceVariant
+                                val backgroundShape = if (isSelected) CyanAction else Color.Transparent
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            if (tab == BottomTab.TASKS) {
+                                                currentWorksheetsScreen = AppScreen.Worksheets
+                                                selectedConsumer = null
+                                                isNavigatedFromMap = false
+                                            }
+                                            currentTab = tab
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .height(32.dp)
+                                            .width(56.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(backgroundShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = tab.icon,
+                                            contentDescription = tab.label,
+                                            tint = iconColor,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = tab.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }
+                }
+            },
+        ) { paddingValues ->
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = paddingValues.calculateBottomPadding())
+            ) {
+                AnimatedContent(targetState = currentTab, label = "TabAnim") { targetTab ->
+                    when (targetTab) {
+                        BottomTab.HOME -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                Spacer(modifier = Modifier.height(32.dp))
 
-                    BottomTab.MAP -> {
-                        MapScreen(
-                            worksheets = worksheets,
-                            consumers = mapConsumersList,
-                            totalCount = totalConsumersCount,
-                            foundCount = foundCoordinatesCount,
-
-                            // 🔥 ПЕРЕДАЕМ ПАРАМЕТРЫ УМНОЙ КАМЕРЫ 🔥
-                            initialCenter = mapCenterState,
-                            initialZoom = mapZoomState,
-                            cameraTarget = mapCameraTarget,
-                            onCameraTargetSettled = { mapCameraTarget = null }, // Сброс цели
-                            onMapStateChanged = { center, zoom ->
-                                // Сохраняем состояние при скролле
-                                mapCenterState = center
-                                mapZoomState = zoom
-                            },
-
-                            onWorksheetSelected = { worksheet ->
-                                selectedMapWorksheetId = worksheet.id
-                                geoService.startForWorksheet(worksheet.id)
-                                Toast.makeText(context, "Запуск пошуку...", Toast.LENGTH_SHORT).show()
-                            },
-                            onConsumerClick = { consumer ->
-                                selectedConsumer = consumer
-                                isNavigatedFromMap = true
-                                currentTab = BottomTab.LIST
-                                currentWorksheetsScreen = AppScreen.ConsumerDetail
-                            },
-                            isGeocoding = isGeocoding,
-                            progress = geoProgress
-                        )
-                    }
-
-                    BottomTab.PROFILE -> ProfileScreen(currentTheme = currentTheme, onThemeSelected = onThemeChanged)
-
-                    BottomTab.LIST -> {
-                        AnimatedContent(targetState = currentWorksheetsScreen, label = "ListAnim") { targetScreen ->
-                            when (targetScreen) {
-                                AppScreen.Worksheets -> WorksheetsScreen(
-                                    worksheets = worksheets,
-                                    onWorksheetClick = { ws ->
-                                        selectedWorksheetId = ws.id
-                                        isNavigatedFromMap = false
-                                        currentWorksheetsScreen = AppScreen.ConsumerList
-                                    },
-                                    onAddWorksheet = { launchImport = true },
-                                    onDeleteWorksheet = { ws -> coroutineScope.launch { repository.deleteWorksheet(ws) } },
-                                    onRenameWorksheet = { ws, name -> coroutineScope.launch { repository.renameWorksheet(ws, name) } },
-                                    onViewResults = { currentWorksheetsScreen = AppScreen.WorkResults },
-                                    onBackClick = {}
+                                Text(
+                                    text = "Привіт, Владислав",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
-                                AppScreen.ConsumerList -> ConsumerListScreen(
-                                    consumers = worksheetConsumers,
-                                    onConsumerClick = { c ->
-                                        selectedConsumer = c
-                                        isNavigatedFromMap = false
-                                        currentWorksheetsScreen = AppScreen.ConsumerDetail
-                                    },
-                                    onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets }
+                                Text(
+                                    text = "Гарного дня для роботи!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                AppScreen.ConsumerDetail -> ConsumerDetailScreen(
-                                    consumer = selectedConsumer!!,
-                                    workResult = workResultForSelectedConsumer,
-                                    onBackClick = {
-                                        if (isNavigatedFromMap) {
-                                            currentTab = BottomTab.MAP
-                                        } else {
+
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    val totalConsumers = worksheets.sumOf { it.totalConsumers }
+
+                                    StatCard(
+                                        title = "Завантажено точок",
+                                        value = "$totalConsumers",
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    StatCard(
+                                        title = "Загальний борг",
+                                        value = "--- грн",
+                                        modifier = Modifier.weight(1f),
+                                        valueColor = MaterialTheme.colorScheme.error
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(32.dp))
+
+                                MappingGradientButton(
+                                    text = "ЗАВАНТАЖИТИ EXCEL",
+                                    icon = Icons.Default.FileUpload,
+                                    onClick = { launchImport = true }
+                                )
+
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    MenuGridButton(
+                                        title = "Карта",
+                                        icon = Icons.Default.Map,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { currentTab = BottomTab.MAP }
+                                    )
+
+                                    MenuGridButton(
+                                        title = "Звіти",
+                                        icon = Icons.Default.Description,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = {
+                                            currentTab = BottomTab.TASKS
+                                            currentWorksheetsScreen = AppScreen.WorkResults
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        BottomTab.MAP -> {
+                            MapScreen(
+                                worksheets = worksheets,
+                                consumers = mapConsumersList,
+                                totalCount = totalConsumersCount,
+                                foundCount = foundCoordinatesCount,
+                                initialCenter = mapCenterState,
+                                initialZoom = mapZoomState,
+                                cameraTarget = mapCameraTarget,
+                                onCameraTargetSettled = { mapCameraTarget = null },
+                                onMapStateChanged = { center, zoom ->
+                                    mapCenterState = center
+                                    mapZoomState = zoom
+                                },
+                                onWorksheetSelected = { worksheet ->
+                                    selectedMapWorksheetId = worksheet.id
+                                    geoService.startForWorksheet(worksheet.id)
+                                    notificationMessage = "Запуск пошуку адрес..."
+                                    notificationColor = CyanAction
+                                },
+                                onConsumerClick = { consumer ->
+                                    selectedConsumer = consumer
+                                    isNavigatedFromMap = true
+                                    currentTab = BottomTab.TASKS
+                                    currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                },
+                                isGeocoding = isGeocoding,
+                                progress = geoProgress
+                            )
+                        }
+
+                        BottomTab.PROFILE -> ProfileScreen(currentTheme = currentTheme, onThemeSelected = onThemeChanged)
+
+                        BottomTab.TASKS -> {
+                            AnimatedContent(targetState = currentWorksheetsScreen, label = "ListAnim") { targetScreen ->
+                                when (targetScreen) {
+                                    AppScreen.Worksheets -> WorksheetsScreen(
+                                        worksheets = worksheets,
+                                        onWorksheetClick = { ws ->
+                                            selectedWorksheetId = ws.id
+                                            isNavigatedFromMap = false
                                             currentWorksheetsScreen = AppScreen.ConsumerList
-                                        }
-                                    },
-                                    onProcessClick = { currentWorksheetsScreen = AppScreen.ProcessConsumer },
-                                    onManualLocationClick = {
-                                        currentWorksheetsScreen = AppScreen.EditLocation(selectedConsumer!!)
-                                    }
-                                )
-                                is AppScreen.EditLocation -> EditLocationScreen(
-                                    consumer = targetScreen.consumer,
-                                    onSave = { lat, lng ->
-                                        val c = targetScreen.consumer
-                                        c.latitude = lat
-                                        c.longitude = lng
-                                        coroutineScope.launch {
-                                            repository.updateConsumer(c)
-                                            successMessage = "Координати змінено вручну"; showSuccessToast = true
+                                        },
+                                        onAddWorksheet = { launchImport = true },
+                                        onDeleteWorksheet = { ws -> coroutineScope.launch { repository.deleteWorksheet(ws) } },
+                                        onRenameWorksheet = { ws, name -> coroutineScope.launch { repository.renameWorksheet(ws, name) } },
+                                        onViewResults = { currentWorksheetsScreen = AppScreen.WorkResults },
+                                        onBackClick = {}
+                                    )
+                                    AppScreen.ConsumerList -> ConsumerListScreen(
+                                        consumers = worksheetConsumers,
+                                        onConsumerClick = { c ->
+                                            selectedConsumer = c
+                                            isNavigatedFromMap = false
                                             currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                        },
+                                        onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets }
+                                    )
+
+                                    AppScreen.ConsumerDetail -> ConsumerDetailScreen(
+                                        consumer = selectedConsumer!!,
+                                        workResult = workResultForSelectedConsumer,
+                                        onBackClick = {
+                                            if (isNavigatedFromMap) {
+                                                currentTab = BottomTab.MAP
+                                            } else {
+                                                currentWorksheetsScreen = AppScreen.ConsumerList
+                                            }
+                                        },
+                                        onProcessClick = { currentWorksheetsScreen = AppScreen.ProcessConsumer },
+                                        onManualLocationClick = {
+                                            currentWorksheetsScreen = AppScreen.EditLocation(selectedConsumer!!)
+                                        },
+                                        onMapClick = {
+                                            selectedConsumer?.let { consumer ->
+                                                if (consumer.latitude != null && consumer.latitude != 0.0) {
+                                                    mapCameraTarget = GeoPoint(consumer.latitude!!, consumer.longitude!!)
+                                                    currentTab = BottomTab.MAP
+                                                    notificationMessage = "Перехід на карту..."
+                                                    notificationColor = StatusGreen
+                                                } else {
+                                                    notificationMessage = "Пошук координат..."
+                                                    notificationColor = CyanAction
+                                                    val smartAddress = constructSmartAddress(consumer.rawAddress)
+                                                    AddressHelper.searchAddress(smartAddress) { location ->
+                                                        coroutineScope.launch(Dispatchers.Main) {
+                                                            if (location == null) {
+                                                                notificationMessage = "Не знайдено! Перевірте адресу"
+                                                                notificationColor = StatusRed
+                                                            } else {
+                                                                consumer.latitude = location.lat
+                                                                consumer.longitude = location.lng
+                                                                repository.updateConsumer(consumer)
+                                                                notificationMessage = "Знайдено! Натисніть ще раз"
+                                                                notificationColor = StatusGreen
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
-                                    },
-                                    onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
-                                )
-                                AppScreen.ProcessConsumer -> ProcessConsumerScreen(
-                                    consumer = selectedConsumer!!,
-                                    initialResult = workResultForSelectedConsumer,
-                                    onSave = { result ->
-                                        coroutineScope.launch {
-                                            repository.saveWorkResult(selectedConsumer!!.id, result)
-                                            withContext(Dispatchers.Main) {
-                                                workResultForSelectedConsumer = result
+                                    )
+
+                                    is AppScreen.EditLocation -> EditLocationScreen(
+                                        consumer = targetScreen.consumer,
+                                        onSave = { lat, lng ->
+                                            val c = targetScreen.consumer
+                                            c.latitude = lat
+                                            c.longitude = lng
+                                            coroutineScope.launch {
+                                                repository.updateConsumer(c)
+                                                notificationMessage = "Координати збережено вручну"
+                                                notificationColor = StatusGreen
                                                 currentWorksheetsScreen = AppScreen.ConsumerDetail
-                                                successMessage = "Збережено"; showSuccessToast = true
                                             }
-                                        }
-                                    },
-                                    onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
-                                )
-                                // --- ЛОГИКА ЭКРАНА РЕЗУЛЬТАТОВ И ЭКСПОРТА ---
-                                AppScreen.WorkResults -> WorkResultsScreen(
-                                    worksheets = worksheets,
-                                    onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets },
-                                    onExportClick = { worksheet ->
-                                        Toast.makeText(context, "Генерую звіт...", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
+                                    )
 
-                                        coroutineScope.launch(Dispatchers.IO) {
-                                            try {
-                                                // 1. Берем потребителей
-                                                val consumers = repository.getConsumersFlow(worksheet.id).first()
-
-                                                // 2. Собираем данные
-                                                val dataForExport = consumers.map { consumer ->
-                                                    val result = repository.getWorkResultByConsumerId(consumer.id)
-                                                    consumer to result
-                                                }
-
-                                                // 3. Создаем Excel через Parser
-                                                val file = ExcelParser().exportWorksheet(context, worksheet.fileName, dataForExport)
-
-                                                // 4. Отправляем
+                                    AppScreen.ProcessConsumer -> ProcessConsumerScreen(
+                                        consumer = selectedConsumer!!,
+                                        initialResult = workResultForSelectedConsumer,
+                                        onSave = { result ->
+                                            coroutineScope.launch {
+                                                repository.saveWorkResult(selectedConsumer!!.id, result)
                                                 withContext(Dispatchers.Main) {
-                                                    shareExcelFile(context, file)
-                                                }
-                                            } catch (e: Exception) {
-                                                withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "Помилка експорту: ${e.message}", Toast.LENGTH_LONG).show()
-                                                    e.printStackTrace()
+                                                    workResultForSelectedConsumer = result
+                                                    currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                                    notificationMessage = "ОР ${selectedConsumer!!.orNumber} - опрацьовано!"
+                                                    notificationColor = StatusGreen
                                                 }
                                             }
+                                        },
+                                        onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
+                                    )
+
+                                    AppScreen.WorkResults -> WorkResultsScreen(
+                                        worksheets = worksheets,
+                                        onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets },
+                                        onExportClick = { worksheet ->
+                                            notificationMessage = "Генерую звіт..."
+                                            notificationColor = CyanAction
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                try {
+                                                    val consumers = repository.getConsumersFlow(worksheet.id).first()
+                                                    val dataForExport = consumers.map { consumer ->
+                                                        val result = repository.getWorkResultByConsumerId(consumer.id)
+                                                        consumer to result
+                                                    }
+                                                    val file = ExcelParser().exportWorksheet(context, worksheet.fileName, dataForExport)
+                                                    withContext(Dispatchers.Main) {
+                                                        shareExcelFile(context, file)
+                                                    }
+                                                } catch (e: Exception) {
+                                                    withContext(Dispatchers.Main) {
+                                                        notificationMessage = "Помилка експорту: ${e.message}"
+                                                        notificationColor = StatusRed
+                                                        e.printStackTrace()
+                                                    }
+                                                }
+                                            }
                                         }
-                                    }
-                                )
-                                else -> {}
+                                    )
+                                    else -> {}
+                                }
                             }
                         }
                     }
                 }
             }
         }
+
+        TopSuccessNotification(
+            message = notificationMessage ?: "",
+            isVisible = notificationMessage != null,
+            onDismiss = { notificationMessage = null },
+            backgroundColor = notificationColor
+        )
     }
 }
 
@@ -547,7 +645,6 @@ fun getFileNameFromUri(context: Context, uri: Uri): String {
     return result ?: "imported_file.xlsx"
 }
 
-// --- ФУНКЦИЯ ПОДЕЛИТЬСЯ ФАЙЛОМ (В самом низу) ---
 fun shareExcelFile(context: Context, file: java.io.File) {
     val uri = androidx.core.content.FileProvider.getUriForFile(
         context,
@@ -575,9 +672,9 @@ sealed class AppScreen {
     data class EditLocation(val consumer: Consumer) : AppScreen()
 }
 
-enum class BottomTab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+enum class BottomTab(val label: String, val icon: ImageVector) {
     HOME("Головна", Icons.Filled.Home),
-    LIST("Відомості", Icons.Filled.List),
+    TASKS("Задачі", Icons.Filled.Assignment),
     MAP("Мапа", Icons.Filled.Map),
     PROFILE("Профіль", Icons.Filled.Person)
 }

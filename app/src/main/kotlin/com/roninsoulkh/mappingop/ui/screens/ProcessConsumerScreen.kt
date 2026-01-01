@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -36,6 +35,7 @@ import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.roninsoulkh.mappingop.domain.models.*
 import com.roninsoulkh.mappingop.utils.openMediaFile
+import com.roninsoulkh.mappingop.ui.components.* import com.roninsoulkh.mappingop.ui.theme.CyanAction
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -52,31 +52,33 @@ fun ProcessConsumerScreen(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
+    // Стани полів вводу
     var meterReading by remember { mutableStateOf(initialResult?.meterReading?.toString() ?: "") }
     var newPhone by remember { mutableStateOf(initialResult?.newPhone ?: "") }
     var comment by remember { mutableStateOf(initialResult?.comment ?: "") }
 
+    // Фото
     val photoPaths = remember { mutableStateListOf<String>() }
 
+    // Ініціалізація фото при редагуванні
     LaunchedEffect(initialResult) {
         if (initialResult != null && photoPaths.isEmpty()) {
             photoPaths.addAll(initialResult.photos)
         }
     }
 
+    // Стани випадаючих списків
     var selectedBuildingCondition by remember { mutableStateOf(initialResult?.buildingCondition ?: BuildingCondition.UNKNOWN) }
     var selectedConsumerType by remember { mutableStateOf(initialResult?.consumerType) }
     var selectedWorkType by remember { mutableStateOf(initialResult?.workType) }
 
-    var showBuildingConditionDropdown by remember { mutableStateOf(false) }
-    var showConsumerTypeDropdown by remember { mutableStateOf(false) }
-    var showWorkTypeDropdown by remember { mutableStateOf(false) }
+    // Діалог вибору медіа
     var showMediaSourceDialog by remember { mutableStateOf(false) }
-
     var isVideoMode by remember { mutableStateOf(false) }
     var currentPhotoPath by remember { mutableStateOf<String?>(null) }
 
-    // Лаунчер галереи
+    // --- ЛОГІКА КАМЕРИ ТА ГАЛЕРЕЇ ---
+
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             val savedFile = copyUriToInternalStorage(context, it)
@@ -84,7 +86,6 @@ fun ProcessConsumerScreen(
         }
     }
 
-    // Лаунчеры камеры
     val cameraPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success && currentPhotoPath != null) {
             photoPaths.add(currentPhotoPath!!)
@@ -97,7 +98,6 @@ fun ProcessConsumerScreen(
         }
     }
 
-    // Функция запуска камеры (вынесли отдельно, чтобы вызывать из разных мест)
     fun launchCamera() {
         val (uri, path) = createMediaFile(context, isVideoMode)
         currentPhotoPath = path
@@ -108,35 +108,204 @@ fun ProcessConsumerScreen(
         }
     }
 
-    // Лаунчер разрешений
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
             launchCamera()
         } else {
-            Toast.makeText(context, "Потрібен дозвіл на камеру. Увімкніть його в налаштуваннях.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Потрібен дозвіл на камеру", Toast.LENGTH_LONG).show()
         }
     }
 
+    // --- ЕКРАН ---
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Опрацьовано: ОР ${consumer.orNumber}") },
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = "Опрацювання: ОР ${consumer.orNumber}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onCancel) { Icon(Icons.Filled.ArrowBack, "Назад") }
-                }
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.Default.ArrowBack, "Назад")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                )
             )
-        },
-        bottomBar = {
-            BottomAppBar {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TextButton(onClick = onCancel) { Text("Скасувати") }
+        }
+    ) { paddingValues ->
+        // 🔥 Головний контейнер Column
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(paddingValues)
+        ) {
+            // 1. СКРОЛЛ-ЗОНА (Займає все місце, крім кнопок знизу)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
 
-                    Button(
+                // 1. ІНФО (Компактніше)
+                MappingCard {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = consumer.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = consumer.rawAddress,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                // 2. ПОЛЯ ВВОДУ
+                MappingTextField(
+                    value = meterReading,
+                    onValueChange = { meterReading = it },
+                    label = "Показники лічильника",
+                    icon = Icons.Filled.Speed,
+                    keyboardType = KeyboardType.Number
+                )
+
+                MappingTextField(
+                    value = newPhone,
+                    onValueChange = { newPhone = it },
+                    label = "Новий номер телефону",
+                    icon = Icons.Filled.Phone,
+                    keyboardType = KeyboardType.Phone
+                )
+
+                // 3. DROPDOWNS
+                MappingDropdownField(
+                    label = "Стан будівлі",
+                    selectedValue = getBuildingConditionText(selectedBuildingCondition),
+                    items = BuildingCondition.values().filter { it != BuildingCondition.UNKNOWN }.toList(),
+                    itemToString = { getBuildingConditionText(it) },
+                    onItemSelected = { selectedBuildingCondition = it },
+                    icon = Icons.Filled.HomeWork
+                )
+
+                MappingDropdownField(
+                    label = "Класифікатор споживача",
+                    selectedValue = selectedConsumerType?.let { getConsumerTypeText(it) } ?: "Не вибрано",
+                    items = ConsumerType.values().toList(),
+                    itemToString = { getConsumerTypeText(it) },
+                    onItemSelected = { selectedConsumerType = it },
+                    icon = Icons.Filled.PersonSearch
+                )
+
+                MappingDropdownField(
+                    label = "Тип відпрацювання",
+                    selectedValue = selectedWorkType?.let { getWorkTypeText(it) } ?: "Не вибрано",
+                    items = WorkType.values().toList(),
+                    itemToString = { getWorkTypeText(it) },
+                    onItemSelected = { selectedWorkType = it },
+                    icon = Icons.Filled.AssignmentTurnedIn
+                )
+
+                MappingTextField(
+                    value = comment,
+                    onValueChange = { comment = it },
+                    label = "Коментар",
+                    icon = Icons.Filled.Comment
+                )
+
+                // 4. МЕДІА
+                Column {
+                    Text(
+                        text = "Фото та Відео фіксація",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(90.dp)
+                    ) {
+                        item {
+                            AddMediaButton(onClick = { showMediaSourceDialog = true })
+                        }
+
+                        items(photoPaths) { path ->
+                            val isVideo = path.endsWith(".mp4", ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(90.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { openMediaFile(context, path) }
+                            ) {
+                                if (isVideo) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Filled.PlayCircle, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                                    }
+                                } else {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(model = File(path)),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+
+                                // Кнопка видалення
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(24.dp)
+                                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50))
+                                        .clickable { photoPaths.remove(path) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Filled.Close, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // 🔥 2. КОМПАКТНА ПАНЕЛЬ ЗНИЗУ
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        // 🔥 ВИПРАВЛЕНО ТУТ:
+                        .navigationBarsPadding() // Сначала отступ системы
+                        .padding(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 0.dp) // Знизу 0.dp
+                ) {
+                    MappingGradientButton(
+                        text = "ЗБЕРЕГТИ",
+                        icon = Icons.Filled.Save,
                         onClick = {
                             val result = WorkResult(
                                 consumerId = consumer.id,
@@ -151,277 +320,85 @@ fun ProcessConsumerScreen(
                             )
                             onSave(result)
                         }
-                    ) {
-                        Icon(Icons.Filled.Save, null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Зберегти")
-                    }
-                }
-            }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Інформація про споживача", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("ОР №${consumer.orNumber}", fontSize = 14.sp)
-                    Text(consumer.shortAddress, fontSize = 12.sp)
-                    Text(consumer.name, fontSize = 12.sp)
-                }
-            }
-
-            OutlinedTextField(
-                value = meterReading,
-                onValueChange = { meterReading = it },
-                label = { Text("Показники лічильника") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                leadingIcon = { Icon(Icons.Filled.Speed, null) }
-            )
-
-            OutlinedTextField(
-                value = newPhone,
-                onValueChange = { newPhone = it },
-                label = { Text("Новий номер телефону") },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                leadingIcon = { Icon(Icons.Filled.Phone, null) }
-            )
-
-            // Стан будівлі
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = getBuildingConditionText(selectedBuildingCondition),
-                    onValueChange = { },
-                    label = { Text("Стан будівлі") },
-                    modifier = Modifier.fillMaxWidth(),
-                    readOnly = true,
-                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { showBuildingConditionDropdown = true }
-                )
-            }
-
-            // Класифікатор
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = selectedConsumerType?.let { getConsumerTypeText(it) } ?: "",
-                    onValueChange = { },
-                    label = { Text("Класифікатор споживача") },
-                    modifier = Modifier.fillMaxWidth(),
-                    readOnly = true,
-                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { showConsumerTypeDropdown = true }
-                )
-            }
-
-            // Тип відпрацювання
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = selectedWorkType?.let { getWorkTypeText(it) } ?: "",
-                    onValueChange = { },
-                    label = { Text("Тип відпрацювання") },
-                    modifier = Modifier.fillMaxWidth(),
-                    readOnly = true,
-                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { showWorkTypeDropdown = true }
-                )
-            }
-
-            OutlinedTextField(
-                value = comment,
-                onValueChange = { comment = it },
-                label = { Text("Коментар") },
-                modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Filled.Comment, null) }
-            )
-
-            Text("Фото та Відео фіксація", style = MaterialTheme.typography.titleMedium)
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().height(100.dp)
-            ) {
-                item {
-                    Card(
-                        modifier = Modifier.size(100.dp).clickable { showMediaSourceDialog = true },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.AddAPhoto, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                                Text("Додати", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                            }
-                        }
-                    }
-                }
-
-                items(photoPaths) { path ->
-                    val isVideo = path.endsWith(".mp4", ignoreCase = true)
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { openMediaFile(context, path) }
-                    ) {
-                        if (isVideo) {
-                            Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.PlayCircle, null, tint = Color.White, modifier = Modifier.size(48.dp))
-                            }
-                        } else {
-                            Image(
-                                painter = rememberAsyncImagePainter(model = File(path)),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { photoPaths.remove(path) },
-                            modifier = Modifier.align(Alignment.TopEnd).size(24.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), RoundedCornerShape(50))
-                        ) {
-                            Icon(Icons.Filled.Close, null, modifier = Modifier.size(16.dp))
-                        }
-                    }
+                    )
                 }
             }
         }
     }
 
+    // ДІАЛОГ ВИБОРУ МЕДІА (Без змін)
     if (showMediaSourceDialog) {
-        AlertDialog(
-            onDismissRequest = { showMediaSourceDialog = false },
-            title = { Text("Додати медіа") },
-            text = { Text("Що ви хочете додати?") },
-            confirmButton = {},
-            dismissButton = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        TextButton(onClick = {
-                            showMediaSourceDialog = false
-                            isVideoMode = false
-                            // ПРОВЕРКА РАЗРЕШЕНИЯ ПЕРЕД ЗАПУСКОМ
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                launchCamera()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        }) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.PhotoCamera, null)
-                                Text("Фото")
-                            }
-                        }
-
-                        TextButton(onClick = {
-                            showMediaSourceDialog = false
-                            isVideoMode = true
-                            // ПРОВЕРКА РАЗРЕШЕНИЯ ПЕРЕД ЗАПУСКОМ
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                launchCamera()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        }) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.Videocam, null)
-                                Text("Відео")
-                            }
+        MappingCustomDialog(
+            title = "Додати медіа",
+            onDismiss = { showMediaSourceDialog = false }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        showMediaSourceDialog = false
+                        isVideoMode = false
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            launchCamera()
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
                         }
                     }
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    TextButton(
-                        onClick = {
-                            showMediaSourceDialog = false
-                            galleryLauncher.launch("*/*")
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Вибрати з Галереї") }
+                ) {
+                    Icon(
+                        Icons.Filled.PhotoCamera,
+                        null,
+                        modifier = Modifier.size(48.dp),
+                        tint = CyanAction
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Фото", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        showMediaSourceDialog = false
+                        isVideoMode = true
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            launchCamera()
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }
+                ) {
+                    Icon(
+                        Icons.Filled.Videocam,
+                        null,
+                        modifier = Modifier.size(48.dp),
+                        tint = CyanAction
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Відео", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-        )
-    }
 
-    if (showBuildingConditionDropdown) {
-        AlertDialog(
-            onDismissRequest = { showBuildingConditionDropdown = false },
-            title = { Text("Стан будівлі") },
-            text = {
-                Column {
-                    BuildingCondition.values().filter { it != BuildingCondition.UNKNOWN }.forEach { condition ->
-                        ElevatedButton(
-                            onClick = { selectedBuildingCondition = condition; showBuildingConditionDropdown = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(getBuildingConditionText(condition)) }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
-    }
+            Spacer(modifier = Modifier.height(24.dp))
+            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            Spacer(modifier = Modifier.height(12.dp))
 
-    if (showConsumerTypeDropdown) {
-        AlertDialog(
-            onDismissRequest = { showConsumerTypeDropdown = false },
-            title = { Text("Класифікатор") },
-            text = {
-                Column {
-                    ConsumerType.values().forEach { type ->
-                        ElevatedButton(
-                            onClick = { selectedConsumerType = type; showConsumerTypeDropdown = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(getConsumerTypeText(type)) }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
-    }
-
-    if (showWorkTypeDropdown) {
-        AlertDialog(
-            onDismissRequest = { showWorkTypeDropdown = false },
-            title = { Text("Тип відпрацювання") },
-            text = {
-                Column {
-                    WorkType.values().forEach { type ->
-                        ElevatedButton(
-                            onClick = { selectedWorkType = type; showWorkTypeDropdown = false },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(getWorkTypeText(type)) }
-                    }
-                }
-            },
-            confirmButton = {}
-        )
+            TextButton(
+                onClick = {
+                    showMediaSourceDialog = false
+                    galleryLauncher.launch("*/*")
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Вибрати з Галереї", color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 }
+
+// --- ХЕЛПЕРИ ---
 
 fun createMediaFile(context: Context, isVideo: Boolean): Pair<Uri, String> {
     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -451,6 +428,8 @@ fun copyUriToInternalStorage(context: Context, uri: Uri): File? {
     inputStream.use { input -> outputStream.use { output -> input.copyTo(output) } }
     return file
 }
+
+// --- ENUM ТЕКСТИ ---
 
 private fun getBuildingConditionText(condition: BuildingCondition): String {
     return when (condition) {

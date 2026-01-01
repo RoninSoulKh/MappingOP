@@ -25,8 +25,8 @@ android {
         applicationId = "com.roninsoulkh.mappingop"
         minSdk = 33
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.1.1-BugFix"
+        versionCode = 10
+        versionName = "2.0.0-UI/UX"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "app_name", "Mapping OP")
