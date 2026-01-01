@@ -25,8 +25,8 @@ android {
         applicationId = "com.roninsoulkh.mappingop"
         minSdk = 33
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.7"
+        versionCode = 8
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "app_name", "Mapping OP")
@@ -115,7 +115,7 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
     kaptTest("androidx.room:room-compiler:2.6.1")
-    kaptAndroidTest("androidx.room:room-compiler:2.6.1")
+    // kaptAndroidTest("androidx.room:room-compiler:2.6.1")
 
     // EXCEL (APACHE POI)
     implementation("org.apache.poi:poi-ooxml:5.2.5")
@@ -130,10 +130,10 @@ dependencies {
 
     // TESTING
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.3.0")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.00"))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    // androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+    // androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    // androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 
     // DEBUG
     debugImplementation("androidx.compose.ui:ui-tooling")

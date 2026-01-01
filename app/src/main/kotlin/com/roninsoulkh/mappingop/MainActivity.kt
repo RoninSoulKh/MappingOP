@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -46,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first // ВАЖНЫЙ ИМПОРТ ДЛЯ ЭКСПОРТА
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -97,7 +99,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- УМНЫЙ СБОРЩИК АДРЕСА (Для ручного поиска через AddressHelper) ---
+// --- УМНЫЙ СБОРЩИК АДРЕСА ---
 fun constructSmartAddress(raw: String): String {
     val parts = raw.split(",").map { it.trim() }
 
@@ -138,8 +140,6 @@ fun constructSmartAddress(raw: String): String {
     return addressParts.joinToString(" ")
 }
 
-// ФУНКЦИЯ startMassGeocoding УДАЛЕНА - ОНА БОЛЬШЕ НЕ НУЖНА!
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -156,14 +156,35 @@ fun MainScreen(
     var selectedConsumer by remember { mutableStateOf<Consumer?>(null) }
     var selectedMapWorksheetId by remember { mutableStateOf<String?>(null) }
 
-    // --- ПОДКЛЮЧЕНИЕ НОВОГО СЕРВИСА ГЕОКОДИНГА ---
-    // Это заменяет старую логику с startMassGeocoding
+    // --- ФИКС БАГА №6 (BackHandler) ---
+    BackHandler(enabled = currentTab != BottomTab.HOME || currentWorksheetsScreen != AppScreen.Worksheets) {
+        if (currentTab == BottomTab.LIST) {
+            // Если мы внутри вкладки "Ведомости"
+            when (currentWorksheetsScreen) {
+                is AppScreen.EditLocation,
+                AppScreen.ProcessConsumer -> currentWorksheetsScreen = AppScreen.ConsumerDetail
+                AppScreen.ConsumerDetail -> {
+                    if (isNavigatedFromMap) {
+                        currentTab = BottomTab.MAP
+                    } else {
+                        currentWorksheetsScreen = AppScreen.ConsumerList
+                    }
+                }
+                AppScreen.ConsumerList -> currentWorksheetsScreen = AppScreen.Worksheets
+                AppScreen.WorkResults -> currentWorksheetsScreen = AppScreen.Worksheets // Возврат из результатов
+                else -> currentTab = BottomTab.HOME // Если мы в списке ведомостей - выходим на главную
+            }
+        } else {
+            // Если мы на карте или в профиле - возвращаемся на главную
+            currentTab = BottomTab.HOME
+        }
+    }
+
     val geoService = remember { BatchGeocodingService(repository) }
     val isGeocoding by geoService.isGeocoding.collectAsState()
     val geoProgress by geoService.progress.collectAsState()
     val failedList by geoService.failedList.collectAsState()
 
-    // Слушаем изменения в базе для карты
     val mapConsumersState = remember(selectedMapWorksheetId) {
         if (selectedMapWorksheetId != null) {
             repository.getConsumersFlow(selectedMapWorksheetId!!)
@@ -229,7 +250,6 @@ fun MainScreen(
         LaunchedEffect(Unit) { filePickerLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
     }
 
-    // --- ДИАЛОГ С ОШИБКАМИ ГЕОКОДИНГА ---
     if (failedList.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { geoService.clearErrors() },
@@ -262,7 +282,15 @@ fun MainScreen(
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
                             label = { Text(tab.label) },
                             selected = currentTab == tab,
-                            onClick = { currentTab = tab }
+                            onClick = {
+                                // --- ФИКС БАГА №2 ---
+                                if (tab == BottomTab.LIST) {
+                                    currentWorksheetsScreen = AppScreen.Worksheets
+                                    selectedConsumer = null
+                                    isNavigatedFromMap = false
+                                }
+                                currentTab = tab
+                            }
                         )
                     }
                 }
@@ -342,7 +370,6 @@ fun MainScreen(
                             foundCount = foundCoordinatesCount,
                             onWorksheetSelected = { worksheet ->
                                 selectedMapWorksheetId = worksheet.id
-                                // ЗАПУСКАЕМ СЕРВИС ВМЕСТО СТАРОЙ ФУНКЦИИ
                                 geoService.startForWorksheet(worksheet.id)
                                 Toast.makeText(context, "Запуск пошуку...", Toast.LENGTH_SHORT).show()
                             },
@@ -352,7 +379,6 @@ fun MainScreen(
                                 currentTab = BottomTab.LIST
                                 currentWorksheetsScreen = AppScreen.ConsumerDetail
                             },
-                            // Передаем состояние прогресса в карту
                             isGeocoding = isGeocoding,
                             progress = geoProgress
                         )
@@ -429,7 +455,40 @@ fun MainScreen(
                                     },
                                     onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
                                 )
-                                AppScreen.WorkResults -> WorkResultsScreen(onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets })
+                                // --- ЛОГИКА ЭКРАНА РЕЗУЛЬТАТОВ И ЭКСПОРТА ---
+                                AppScreen.WorkResults -> WorkResultsScreen(
+                                    worksheets = worksheets,
+                                    onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets },
+                                    onExportClick = { worksheet ->
+                                        Toast.makeText(context, "Генерую звіт...", Toast.LENGTH_SHORT).show()
+
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            try {
+                                                // 1. Берем потребителей
+                                                val consumers = repository.getConsumersFlow(worksheet.id).first()
+
+                                                // 2. Собираем данные
+                                                val dataForExport = consumers.map { consumer ->
+                                                    val result = repository.getWorkResultByConsumerId(consumer.id)
+                                                    consumer to result
+                                                }
+
+                                                // 3. Создаем Excel через Parser
+                                                val file = ExcelParser().exportWorksheet(context, worksheet.fileName, dataForExport)
+
+                                                // 4. Отправляем
+                                                withContext(Dispatchers.Main) {
+                                                    shareExcelFile(context, file)
+                                                }
+                                            } catch (e: Exception) {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "Помилка експорту: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    e.printStackTrace()
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
                                 else -> {}
                             }
                         }
@@ -457,6 +516,24 @@ fun getFileNameFromUri(context: Context, uri: Uri): String {
         if (cut != -1 && cut != null) result = result?.substring(cut + 1)
     }
     return result ?: "imported_file.xlsx"
+}
+
+// --- ФУНКЦИЯ ПОДЕЛИТЬСЯ ФАЙЛОМ (В самом низу) ---
+fun shareExcelFile(context: Context, file: java.io.File) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.provider",
+        file
+    )
+
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    val chooser = android.content.Intent.createChooser(intent, "Надіслати звіт через...")
+    context.startActivity(chooser)
 }
 
 sealed class AppScreen {

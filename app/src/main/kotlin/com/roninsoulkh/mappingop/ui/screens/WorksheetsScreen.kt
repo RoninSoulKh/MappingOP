@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.roninsoulkh.mappingop.domain.models.Worksheet
 import java.text.SimpleDateFormat
 import java.util.*
@@ -23,36 +26,33 @@ fun WorksheetsScreen(
     worksheets: List<Worksheet>,
     onWorksheetClick: (Worksheet) -> Unit,
     onAddWorksheet: () -> Unit,
-    onBackClick: () -> Unit,
-    onViewResults: () -> Unit,
     onDeleteWorksheet: (Worksheet) -> Unit,
-    onRenameWorksheet: (Worksheet, String) -> Unit
+    onRenameWorksheet: (Worksheet, String) -> Unit,
+    onViewResults: () -> Unit,
+    onBackClick: () -> Unit
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var worksheetToDelete by remember { mutableStateOf<Worksheet?>(null) }
-    var showRenameDialog by remember { mutableStateOf(false) }
-    var worksheetToRename by remember { mutableStateOf<Worksheet?>(null) }
-    var newNameText by remember { mutableStateOf("") }
-
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Мої відомості") },
-                actions = {
-                    IconButton(onClick = onAddWorksheet) {
-                        Icon(Icons.Filled.Add, contentDescription = "Імпорт")
-                    }
-                }
+            CenterAlignedTopAppBar(
+                title = { Text("Відомості", fontWeight = FontWeight.Bold) },
+                // Кнопка "+" удалена согласно ТЗ
             )
         }
-    ) { padding ->
+    ) { paddingValues ->
         if (worksheets.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Список пустий. Натисніть +, щоб додати.")
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Немає завантажених відомостей", color = Color.Gray)
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -60,50 +60,12 @@ fun WorksheetsScreen(
                     WorksheetItem(
                         worksheet = worksheet,
                         onClick = { onWorksheetClick(worksheet) },
-                        onRename = {
-                            worksheetToRename = worksheet
-                            newNameText = worksheet.fileName
-                            showRenameDialog = true
-                        },
-                        onDelete = {
-                            worksheetToDelete = worksheet
-                            showDeleteDialog = true
-                        }
+                        onRename = { newName -> onRenameWorksheet(worksheet, newName) },
+                        onDelete = { onDeleteWorksheet(worksheet) }
                     )
                 }
             }
         }
-    }
-
-    // --- ДИАЛОГИ ---
-    if (showDeleteDialog && worksheetToDelete != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Видалити відомість?") },
-            text = { Text("Ви збираєтесь видалити '${worksheetToDelete?.fileName}'.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    worksheetToDelete?.let { onDeleteWorksheet(it) }
-                    showDeleteDialog = false
-                }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Видалити") }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Скасувати") } }
-        )
-    }
-
-    if (showRenameDialog && worksheetToRename != null) {
-        AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
-            title = { Text("Перейменувати") },
-            text = { OutlinedTextField(value = newNameText, onValueChange = { newNameText = it }, label = { Text("Назва") }) },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (newNameText.isNotBlank()) { worksheetToRename?.let { onRenameWorksheet(it, newNameText) } }
-                    showRenameDialog = false
-                }) { Text("Зберегти") }
-            },
-            dismissButton = { TextButton(onClick = { showRenameDialog = false }) { Text("Скасувати") } }
-        )
     }
 }
 
@@ -111,72 +73,144 @@ fun WorksheetsScreen(
 fun WorksheetItem(
     worksheet: Worksheet,
     onClick: () -> Unit,
-    onRename: () -> Unit,
+    onRename: (String) -> Unit,
     onDelete: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
-    // Извлекаем дату из ID
-    val dateString = remember(worksheet.id) {
-        try {
-            val timestamp = worksheet.id.substringAfter("_").toLong()
-            val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-            "Імпортовано: ${sdf.format(Date(timestamp))}"
-        } catch (e: Exception) { "" }
-    }
-
-    // ИСПРАВЛЕНИЕ: Берем реальный прогресс из модели Worksheet
-    val progress = worksheet.progress
+    var showMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Folder,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp)
-                )
-                Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = worksheet.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    if (dateString.isNotEmpty()) {
-                        Text(text = dateString, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text(
+                        text = worksheet.fileName, // Используем fileName как есть
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // ИСПРАВЛЕНО: importDate вместо uploadDate
+                    val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+                    Text(
+                        text = dateFormat.format(Date(worksheet.importDate)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
                 }
+
                 Box {
-                    IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, contentDescription = null) }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        DropdownMenuItem(text = { Text("Перейменувати") }, onClick = { expanded = false; onRename() }, leadingIcon = { Icon(Icons.Filled.Edit, null) })
-                        DropdownMenuItem(text = { Text("Видалити", color = Color.Red) }, onClick = { expanded = false; onDelete() }, leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Color.Red) })
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Меню")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Перейменувати") },
+                            onClick = {
+                                showMenu = false
+                                showRenameDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Видалити", color = Color.Red) },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red) }
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Шкала выполнения
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                LinearProgressIndicator(
-                    progress = progress,
-                    modifier = Modifier.weight(1f).height(8.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                // Текст процентов (без десятичных знаков)
+            // ИСПРАВЛЕНО: Используем твоё вычисляемое поле progress
+            // (или считаем вручную, если вдруг поле не подтянется, но у тебя оно есть в коде)
+            val progressVal = if (worksheet.totalConsumers > 0) {
+                worksheet.processedCount.toFloat() / worksheet.totalConsumers
+            } else 0f
+
+            LinearProgressIndicator(
+                progress = { progressVal },
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surface,
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Text(
-                    text = "${(progress * 100).toInt()}%",
+                    text = "${(progressVal * 100).toInt()}%",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold
+                )
+                // ИСПРАВЛЕНО: processedCount и totalConsumers
+                Text(
+                    text = "Опрацьовано: ${worksheet.processedCount} / ${worksheet.totalConsumers}",
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
         }
     }
+
+    if (showRenameDialog) {
+        RenameDialogInternal(
+            initialName = worksheet.fileName,
+            onDismiss = { showRenameDialog = false },
+            onConfirm = { newName ->
+                onRename(newName)
+                showRenameDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun RenameDialogInternal(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Перейменувати") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Назва файлу") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text) }) {
+                Text("Зберегти")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Скасувати")
+            }
+        }
+    )
 }

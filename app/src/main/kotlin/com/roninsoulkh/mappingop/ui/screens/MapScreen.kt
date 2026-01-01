@@ -15,7 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape // <--- ВОТ ОН, ВАЖНЫЙ ИМПОРТ
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
@@ -23,7 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color // Это цвет для Compose UI
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -67,7 +67,7 @@ fun MapScreen(
 
     // Состояния диалогов
     var clusterDialogList by remember { mutableStateOf<List<Consumer>?>(null) }
-    var showNotFoundDialog by remember { mutableStateOf(false) } // Для списка "Не знайдено"
+    var showNotFoundDialog by remember { mutableStateOf(false) }
 
     // === УМНАЯ КЛАСТЕРИЗАЦИЯ ===
     val visibleMarkers = remember(consumers, currentZoomLevel, searchQuery) {
@@ -85,10 +85,10 @@ fun MapScreen(
 
         // 2. Алгоритм группировки
         val gridDistance = when {
-            currentZoomLevel >= 18 -> 0.0001
-            currentZoomLevel >= 15 -> 0.002
-            currentZoomLevel >= 13 -> 0.01
-            else -> 0.05
+            currentZoomLevel >= 18.5 -> 0.00001
+            currentZoomLevel >= 16.0 -> 0.0005
+            currentZoomLevel >= 14.0 -> 0.005
+            else -> 0.03
         }
         groupConsumersByDistance(filtered, gridDistance)
     }
@@ -121,7 +121,7 @@ fun MapScreen(
                     }
                 },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 4.dp)
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.baseline_my_location_24),
@@ -140,7 +140,7 @@ fun MapScreen(
                     MapView(ctx).apply {
                         setTileSource(TileSourceFactory.MAPNIK)
                         setMultiTouchControls(true)
-                        isTilesScaledToDpi = true // !!! ВОТ ЭТО ЧИНИТ МЕЛКИЙ ТЕКСТ !!!
+                        isTilesScaledToDpi = true
                         minZoomLevel = 4.0
                         maxZoomLevel = 20.0
                         controller.setZoom(13.0)
@@ -176,34 +176,28 @@ fun MapScreen(
                             marker.icon = createBlueClusterIcon(context, group.consumers.size)
                             marker.title = "Об'єктів: ${group.consumers.size}"
 
-                            // ЯВНАЯ РЕАЛИЗАЦИЯ СЛУШАТЕЛЯ (ЧТОБЫ НЕ БЫЛО ОШИБКИ)
-                            marker.setOnMarkerClickListener(object : Marker.OnMarkerClickListener {
-                                override fun onMarkerClick(marker: Marker?, mapView: MapView?): Boolean {
-                                    if (mapView != null && mapView.zoomLevelDouble < 17) {
-                                        mapView.controller.animateTo(marker?.position, 17.5, 1000L)
-                                    } else {
-                                        clusterDialogList = group.consumers
-                                    }
-                                    return true
+                            marker.setOnMarkerClickListener { _, map ->
+                                if (map != null && map.zoomLevelDouble < 17.5) {
+                                    map.controller.animateTo(marker.position, map.zoomLevelDouble + 2.0, 1000L)
+                                } else {
+                                    clusterDialogList = group.consumers
                                 }
-                            })
+                                true
+                            }
                         } else {
-                            // ОДИНОЧНЫЙ
+                            // ОДИНОЧНЫЙ МАРКЕР
                             val consumer = group.consumers.first()
-                            // ИСПОЛЬЗУЕМ isProcessed (КАК В МОДЕЛИ)
                             val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
                             val iconDrawable = ContextCompat.getDrawable(context, iconRes)
                             if (iconDrawable != null) marker.icon = iconDrawable
 
                             marker.title = consumer.rawAddress
+                            marker.subDescription = "ОР: ${consumer.orNumber}"
 
-                            // ЯВНАЯ РЕАЛИЗАЦИЯ СЛУШАТЕЛЯ
-                            marker.setOnMarkerClickListener(object : Marker.OnMarkerClickListener {
-                                override fun onMarkerClick(marker: Marker?, mapView: MapView?): Boolean {
-                                    onConsumerClick(consumer)
-                                    return true
-                                }
-                            })
+                            marker.setOnMarkerClickListener { _, _ ->
+                                onConsumerClick(consumer)
+                                true
+                            }
                         }
                         mapView.overlays.add(marker)
                     }
@@ -217,11 +211,11 @@ fun MapScreen(
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                    .padding(top = 4.dp, start = 16.dp, end = 16.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     SearchBar(
                         query = searchQuery,
@@ -238,16 +232,23 @@ fun MapScreen(
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    Box {
+                    Box(
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
                         FilledTonalButton(
                             onClick = { expanded = true },
                             contentPadding = PaddingValues(0.dp),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.size(56.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Icon(Icons.Default.Menu, contentDescription = "Меню")
                         }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            offset = androidx.compose.ui.unit.DpOffset(x = 0.dp, y = 8.dp)
+                        ) {
                             worksheets.forEach { ws ->
                                 DropdownMenuItem(
                                     text = { Text(ws.fileName) },
@@ -262,7 +263,6 @@ fun MapScreen(
                     }
                 }
 
-                // Статистика (Кликабельная!)
                 if (totalCount > 0) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Surface(
@@ -299,13 +299,12 @@ fun MapScreen(
                 }
             }
 
-            // 4. ДИАЛОГ КЛАСТЕРА (С ФИКСОМ КРАША)
+            // 4. ДИАЛОГ КЛАСТЕРА
             if (clusterDialogList != null) {
                 AlertDialog(
                     onDismissRequest = { clusterDialogList = null },
                     title = { Text("За цією локацією (${clusterDialogList!!.size}):") },
                     text = {
-                        // Безопасный вызов (на всякий случай)
                         val safeList = clusterDialogList ?: emptyList()
                         LazyColumn(modifier = Modifier.height(300.dp)) {
                             items(safeList) { consumer ->
@@ -313,7 +312,6 @@ fun MapScreen(
                                     headlineContent = { Text(consumer.rawAddress, style = MaterialTheme.typography.bodySmall) },
                                     supportingContent = { Text(consumer.name, style = MaterialTheme.typography.labelSmall) },
                                     leadingContent = {
-                                        // ИСПРАВЛЕНИЕ: isProcessed
                                         val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
                                         Icon(painter = painterResource(iconRes), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
                                     },
@@ -344,7 +342,7 @@ fun MapScreen(
                                     supportingContent = { Text("Координати: 0.0, 0.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) },
                                     modifier = Modifier.clickable {
                                         showNotFoundDialog = false
-                                        onConsumerClick(consumer) // Переход к редактированию
+                                        onConsumerClick(consumer)
                                     }
                                 )
                                 Divider()
@@ -375,12 +373,14 @@ fun createBlueClusterIcon(context: Context, count: Int): Drawable {
     val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
-    val bgDrawable = ContextCompat.getDrawable(context, R.drawable.ic_cluster_bg)
-    bgDrawable?.setBounds(0, 0, sizePx, sizePx)
-    bgDrawable?.draw(canvas)
+    val paintCircle = Paint().apply {
+        color = android.graphics.Color.parseColor("#1976D2")
+        isAntiAlias = true
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paintCircle)
 
-    // Используем явный android.graphics.Color для кисти
-    val paint = Paint().apply {
+    val paintText = Paint().apply {
         color = android.graphics.Color.WHITE
         textSize = 18f * density
         textAlign = Paint.Align.CENTER
@@ -389,8 +389,8 @@ fun createBlueClusterIcon(context: Context, count: Int): Drawable {
     }
 
     val xPos = sizePx / 2f
-    val yPos = (sizePx / 2f) - ((paint.descent() + paint.ascent()) / 2f)
-    canvas.drawText(count.toString(), xPos, yPos, paint)
+    val yPos = (sizePx / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
+    canvas.drawText(count.toString(), xPos, yPos, paintText)
 
     return BitmapDrawable(context.resources, bitmap)
 }

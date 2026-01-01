@@ -1,5 +1,6 @@
 package com.roninsoulkh.mappingop.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,26 +10,34 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.roninsoulkh.mappingop.domain.models.*
+import com.roninsoulkh.mappingop.domain.models.Worksheet
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkResultsScreen(
-    onBackClick: () -> Unit
+    worksheets: List<Worksheet>,
+    onBackClick: () -> Unit,
+    onExportClick: (Worksheet) -> Unit
 ) {
+    // Фильтруем: показываем только те, где хоть что-то сделано (processedCount > 0)
+    val startedWorksheets = remember(worksheets) {
+        worksheets.filter { it.processedCount > 0 }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("📋 Результати відпрацювання")
+                        Text("Звіти та Експорт")
                         Text(
-                            text = "Всього записів: 0", // Пока заглушка
+                            text = "Готових до звіту: ${startedWorksheets.size}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -42,145 +51,123 @@ fun WorkResultsScreen(
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+        if (startedWorksheets.isEmpty()) {
+            // Если нет ни одной начатой ведомости
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Filled.List,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Екран результатів")
-                Text(
-                    "Тут будуть зберігатися всі опрацьовані споживачі",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Description,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Немає даних для звіту", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Почніть опрацьовувати споживачів,",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "щоб сформувати файл.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            // Список ведомостей
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(startedWorksheets) { worksheet ->
+                    WorksheetReportItem(
+                        worksheet = worksheet,
+                        onExport = { onExportClick(worksheet) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun WorkResultCard(
-    workResult: WorkResult
+fun WorksheetReportItem(
+    worksheet: Worksheet,
+    onExport: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Результат відпрацювання",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-
-                Text(
-                    text = SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault())
-                        .format(Date(workResult.processedAt)),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Тип отработки
-            workResult.workType?.let { workType ->
-                Text(
-                    text = when (workType) {
-                        WorkType.HANDED -> "✅ Вручено в руки"
-                        WorkType.NOTE -> "📝 Шпарина (записка)"
-                        WorkType.REFUSAL -> "❌ Відмова"
-                        WorkType.PAYMENT -> "💰 Оплата поточного"
-                    },
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            // Классификатор потребителя
-            workResult.consumerType?.let { consumerType ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Тип споживача: ${
-                        when (consumerType) {
-                            ConsumerType.CIVILIAN -> "Цивільний"
-                            ConsumerType.VPO -> "ВПО"
-                            ConsumerType.OTHER -> "Інші особи"
-                        }
-                    }",
-                    fontSize = 14.sp
-                )
-            }
-
-            // Состояние здания
-            workResult.buildingCondition?.let { buildingCondition ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Стан будівлі: ${
-                        when (buildingCondition) {
-                            BuildingCondition.LIVING -> "Мешкають"
-                            BuildingCondition.EMPTY -> "Пустка"
-                            BuildingCondition.PARTIALLY_DESTROYED -> "Напівзруйнований"
-                            BuildingCondition.DESTROYED -> "Зруйнований"
-                            BuildingCondition.NOT_LIVING -> "Не мешкають"
-                            BuildingCondition.FORBIDDEN -> "Заборона"
-                            BuildingCondition.UNKNOWN -> "Невідомо"
-                        }
-                    }",
-                    fontSize = 14.sp
-                )
-            }
-
-            // Показания счетчика
-            workResult.meterReading?.let { reading ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Показник лічильника: $reading",
-                    fontSize = 14.sp
-                )
-            }
-
-            // Новый телефон
-            workResult.newPhone?.let { phone ->
-                if (phone.isNotEmpty()) {
+                // Название и дата
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = worksheet.fileName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
+                    val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
                     Text(
-                        text = "Новий телефон: $phone",
-                        fontSize = 14.sp
+                        text = "Імпортовано: " + dateFormat.format(Date(worksheet.importDate)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
                     )
+                }
+
+                // Кнопка экспорта
+                IconButton(
+                    onClick = onExport,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = "Експорт")
                 }
             }
 
-            // Комментарий
-            workResult.comment?.let { comment ->
-                if (comment.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Коментар: $comment",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Статистика
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LinearProgressIndicator(
+                    progress = { worksheet.progress },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(8.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "${worksheet.processedCount} / ${worksheet.totalConsumers}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
             }
         }
     }

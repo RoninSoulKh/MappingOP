@@ -2,6 +2,7 @@ package com.roninsoulkh.mappingop.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,9 +27,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.roninsoulkh.mappingop.domain.models.*
@@ -70,10 +73,10 @@ fun ProcessConsumerScreen(
     var showWorkTypeDropdown by remember { mutableStateOf(false) }
     var showMediaSourceDialog by remember { mutableStateOf(false) }
 
-    var tempUri by remember { mutableStateOf<Uri?>(null) }
     var isVideoMode by remember { mutableStateOf(false) }
     var currentPhotoPath by remember { mutableStateOf<String?>(null) }
 
+    // Лаунчер галереи
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             val savedFile = copyUriToInternalStorage(context, it)
@@ -81,6 +84,7 @@ fun ProcessConsumerScreen(
         }
     }
 
+    // Лаунчеры камеры
     val cameraPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success && currentPhotoPath != null) {
             photoPaths.add(currentPhotoPath!!)
@@ -93,20 +97,25 @@ fun ProcessConsumerScreen(
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
-        if (cameraGranted) {
-            val (uri, path) = createMediaFile(context, isVideoMode)
-            currentPhotoPath = path
-            if (isVideoMode) {
-                cameraVideoLauncher.launch(uri)
-            } else {
-                cameraPhotoLauncher.launch(uri)
-            }
+    // Функция запуска камеры (вынесли отдельно, чтобы вызывать из разных мест)
+    fun launchCamera() {
+        val (uri, path) = createMediaFile(context, isVideoMode)
+        currentPhotoPath = path
+        if (isVideoMode) {
+            cameraVideoLauncher.launch(uri)
         } else {
-            Toast.makeText(context, "Потрібен дозвіл на камеру", Toast.LENGTH_SHORT).show()
+            cameraPhotoLauncher.launch(uri)
+        }
+    }
+
+    // Лаунчер разрешений
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            launchCamera()
+        } else {
+            Toast.makeText(context, "Потрібен дозвіл на камеру. Увімкніть його в налаштуваннях.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -164,7 +173,7 @@ fun ProcessConsumerScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Інформація про споживача", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.sp)
+                    Text("Інформація про споживача", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("ОР №${consumer.orNumber}", fontSize = 14.sp)
                     Text(consumer.shortAddress, fontSize = 12.sp)
                     Text(consumer.name, fontSize = 12.sp)
@@ -189,7 +198,7 @@ fun ProcessConsumerScreen(
                 leadingIcon = { Icon(Icons.Filled.Phone, null) }
             )
 
-            // 👇 ИЗМЕНЕНИЕ: Обернули в Box, чтобы клик работал по всей площади
+            // Стан будівлі
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = getBuildingConditionText(selectedBuildingCondition),
@@ -199,7 +208,6 @@ fun ProcessConsumerScreen(
                     readOnly = true,
                     trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) }
                 )
-                // Невидимый слой, ловящий клик
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -207,7 +215,7 @@ fun ProcessConsumerScreen(
                 )
             }
 
-            // 👇 ИЗМЕНЕНИЕ: То же самое для Классификатора
+            // Класифікатор
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = selectedConsumerType?.let { getConsumerTypeText(it) } ?: "",
@@ -224,7 +232,7 @@ fun ProcessConsumerScreen(
                 )
             }
 
-            // 👇 ИЗМЕНЕНИЕ: То же самое для Типа отработки
+            // Тип відпрацювання
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = selectedWorkType?.let { getWorkTypeText(it) } ?: "",
@@ -308,32 +316,53 @@ fun ProcessConsumerScreen(
             onDismissRequest = { showMediaSourceDialog = false },
             title = { Text("Додати медіа") },
             text = { Text("Що ви хочете додати?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showMediaSourceDialog = false
-                    isVideoMode = true
-                    permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
-                }) {
-                    Icon(Icons.Filled.Videocam, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Відео")
-                }
-            },
+            confirmButton = {},
             dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        showMediaSourceDialog = false
-                        isVideoMode = false
-                        permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
-                    }) {
-                        Icon(Icons.Filled.PhotoCamera, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Фото")
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        TextButton(onClick = {
+                            showMediaSourceDialog = false
+                            isVideoMode = false
+                            // ПРОВЕРКА РАЗРЕШЕНИЯ ПЕРЕД ЗАПУСКОМ
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                launchCamera()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.PhotoCamera, null)
+                                Text("Фото")
+                            }
+                        }
+
+                        TextButton(onClick = {
+                            showMediaSourceDialog = false
+                            isVideoMode = true
+                            // ПРОВЕРКА РАЗРЕШЕНИЯ ПЕРЕД ЗАПУСКОМ
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                launchCamera()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        }) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.Videocam, null)
+                                Text("Відео")
+                            }
+                        }
                     }
-                    TextButton(onClick = {
-                        showMediaSourceDialog = false
-                        galleryLauncher.launch("*/*")
-                    }) { Text("Галерея") }
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    TextButton(
+                        onClick = {
+                            showMediaSourceDialog = false
+                            galleryLauncher.launch("*/*")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Вибрати з Галереї") }
                 }
             }
         )
@@ -422,8 +451,6 @@ fun copyUriToInternalStorage(context: Context, uri: Uri): File? {
     inputStream.use { input -> outputStream.use { output -> input.copyTo(output) } }
     return file
 }
-
-fun getFileFromUri(context: Context, uri: Uri): File? { return null }
 
 private fun getBuildingConditionText(condition: BuildingCondition): String {
     return when (condition) {

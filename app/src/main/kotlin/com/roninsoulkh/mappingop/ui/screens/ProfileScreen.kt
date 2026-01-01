@@ -44,7 +44,7 @@ fun ProfileScreen(
             }
             packageInfo.versionName ?: "Unknown"
         } catch (e: Exception) {
-            "1.0.6" // Запасной вариант, если что-то пошло не так
+            "1.0.6"
         }
     }
 
