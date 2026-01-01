@@ -1,5 +1,6 @@
 # Mapping OP 🗺️
 
+![Version](https://img.shields.io/badge/Version-1.1.1-cyan?style=for-the-badge)
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=android&logoColor=white)
@@ -8,6 +9,23 @@
 **Mapping OP** — это высокотехнологичное Enterprise-решение для цифровой трансформации полевых операций. Приложение автоматизирует полный цикл работы с геопространственными данными: от инжекции ведомостей из внешних систем до прецизионного геокодирования и интеллектуального отображения объектов.
 
 Проект спроектирован с использованием парадигмы **Offline-First**, обеспечивая отказоустойчивость и консистентность данных в условиях полного отсутствия сетевого покрытия.
+
+---
+
+## 🔥 Update v1.1.1: UI/UX & Stability Overhaul
+
+В цьому оновленні проведено повний редизайн інтерфейсу та стабілізацію ядра.
+
+### 🎨 Global Design System (DNA)
+* **Enterprise Dark Theme:** Глибока тема (`#0F172A`) для комфортної роботи в будь-який час доби та економії заряду на AMOLED екранах.
+* **Matte UI:** Відмова від зайвого "шуму" — матові поверхні, високий контраст тексту, акцентний колір `Cyan (#06B6D4)`.
+* **Smart Navigation:** Нова компактна нижня панель навігації та перероблені екрани профілю/налаштувань.
+* **Floating Map UI:** Плаваючий пошук та елементи керування картою, що не перекривають робочу область.
+
+### 🛠️ Bug Fixes & Optimization
+* **Release Build Fixes:** Виправлено помилки підпису (`Keystore`) та конфігурації `ProGuard`, що блокували складання релізної версії.
+* **Performance:** Оптимізація рендерингу списків (LazyColumn) та карти. Досягнуто стабільних 120 FPS на підтримуваних пристроях.
+* **UX Improvements:** Виправлено логіку кнопки "Назад" (BackHandler) та анімації переходів між екранами.
 
 ---
 
@@ -56,15 +74,14 @@
 ```text
 properties
 VISICOM_API_KEY="your_api_key_here"
-```
 
+```
 ### 2. Build Variants
 В проекте настроен специфический конфиг для `release` сборки для корректной работы Apache POI:
 * **Minification:** Отключена (`isMinifyEnabled = false`) для предотвращения удаления необходимых XML-схем POI.
 * **Logging:** Используется кастомная реализация `NullLogger`.
 
-```text
-kotlin
+```kotlin
 buildTypes {
     release {
         isMinifyEnabled = false
@@ -91,10 +108,8 @@ com.roninsoulkh.mappingop
 └── presentation/        # UI Layer (Интерфейс)
     ├── viewmodels/      # State management (MapViewModel, HomeViewModel)
     └── ui/              # Jetpack Compose Screens & Components
+
 ```
-
-## 👥 Team (Команда)
-- **[RoninSoulKh](https://github.com/RoninSoulKh)** — Lead Developer: Architecture, Frontend, Data Processing.
+    ## 👥 Team (Команда)
+- **[RoninSoulKh](https://github.com/RoninSoulKh)** — Lead Developer: Architecture, Frontend, Data Processing, UI/UX design.
 - **[EmsFear](https://github.com/EmsFear)** — Backend Developer: API synchronization logic.
-- **[s1lentoath](https://github.com/s1lentoath)** — UI/UX Designer: Interface concept & identity.
-
