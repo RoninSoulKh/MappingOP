@@ -1,6 +1,6 @@
 # Mapping OP 🗺️
 
-![Version](https://img.shields.io/badge/Version-1.1.1-cyan?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0.0-cyan?style=for-the-badge)
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=android&logoColor=white)
