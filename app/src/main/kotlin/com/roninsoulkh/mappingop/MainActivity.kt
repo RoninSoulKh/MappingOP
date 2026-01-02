@@ -12,6 +12,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,7 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 
+// --- Твои импорты ---
 import com.roninsoulkh.mappingop.data.parser.ExcelParser
 import com.roninsoulkh.mappingop.domain.models.Consumer
 import com.roninsoulkh.mappingop.domain.models.WorkResult
@@ -53,6 +59,16 @@ import com.roninsoulkh.mappingop.ui.theme.CyanAction
 import com.roninsoulkh.mappingop.ui.theme.StatusGreen
 import com.roninsoulkh.mappingop.ui.theme.StatusRed
 
+// --- ИМПОРТЫ АВТОРИЗАЦИИ ---
+import com.roninsoulkh.mappingop.data.local.TokenManager
+import com.roninsoulkh.mappingop.data.repository.AuthRepository
+import com.roninsoulkh.mappingop.presentation.screens.auth.ChangePasswordScreen
+import com.roninsoulkh.mappingop.presentation.screens.auth.LoginScreen
+import com.roninsoulkh.mappingop.presentation.screens.auth.RegisterScreen
+import com.roninsoulkh.mappingop.presentation.viewmodels.AuthUiState
+import com.roninsoulkh.mappingop.presentation.viewmodels.AuthViewModel
+import com.roninsoulkh.mappingop.presentation.viewmodels.AuthViewModelFactory
+
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +78,11 @@ import org.osmdroid.util.GeoPoint
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
-    private val repository by lazy { AppRepository(this) }
+
+    // Инициализация слоев данных
+    private val appRepository by lazy { AppRepository(this) }
+    private val tokenManager by lazy { TokenManager(this) }
+    private val authRepository by lazy { AuthRepository(tokenManager) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         org.osmdroid.config.Configuration.getInstance().load(
@@ -71,8 +91,11 @@ class MainActivity : ComponentActivity() {
         )
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
         setContent {
             val context = LocalContext.current
+
+            // --- ТЕМА ---
             var currentThemeSetting by remember { mutableStateOf(SettingsManager.getTheme(context)) }
             val useDarkTheme = when (currentThemeSetting) {
                 "Light" -> false
@@ -88,16 +111,53 @@ class MainActivity : ComponentActivity() {
                     WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !useDarkTheme
                 }
             }
+
             MappingOPTheme(darkTheme = useDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MainScreen(
-                        repository = repository,
-                        currentTheme = currentThemeSetting,
-                        onThemeChanged = { newTheme ->
-                            SettingsManager.saveTheme(context, newTheme)
-                            currentThemeSetting = newTheme
-                        }
+
+                    // --- 🔥 АВТОРИЗАЦИЯ ---
+
+                    // 1. Создаем ViewModel (передаем tokenManager в фабрику!)
+                    val authViewModel: AuthViewModel = viewModel(
+                        factory = AuthViewModelFactory(authRepository, tokenManager)
                     )
+
+                    // 2. Слушаем состояние входа
+                    val isLoggedInState by tokenManager.isLoggedIn.collectAsState(initial = null)
+
+                    AnimatedContent(
+                        targetState = isLoggedInState,
+                        transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) },
+                        label = "AuthTransition"
+                    ) { loggedIn ->
+                        when (loggedIn) {
+                            null -> {
+                                // Загрузка (сплэш)
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = CyanAction)
+                                }
+                            }
+                            true -> {
+                                // Главный экран (если вошли)
+                                MainScreen(
+                                    repository = appRepository,
+                                    currentTheme = currentThemeSetting,
+                                    onThemeChanged = { newTheme ->
+                                        SettingsManager.saveTheme(context, newTheme)
+                                        currentThemeSetting = newTheme
+                                    },
+                                    onLogout = {
+                                        // 🔥 СВЯЗАЛИ КНОПКУ ВЫХОДА С VIEWMODEL
+                                        authViewModel.logout()
+                                    }
+                                )
+                            }
+                            false -> {
+                                // Экран авторизации (если не вошли)
+                                AuthFlow(authViewModel = authViewModel)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -109,6 +169,57 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+// --- 🔥 ЛОГИКА ЭКРАНОВ АВТОРИЗАЦИИ ---
+@Composable
+fun AuthFlow(authViewModel: AuthViewModel) {
+    val state by authViewModel.uiState.collectAsState()
+
+    // Получаем сохраненные логин/пароль из ViewModel
+    val savedCreds by authViewModel.savedCredentials.collectAsState()
+
+    val context = LocalContext.current
+    LaunchedEffect(state) {
+        if (state is AuthUiState.Error) {
+            Toast.makeText(context, (state as AuthUiState.Error).message, Toast.LENGTH_LONG).show()
+            authViewModel.clearError()
+        }
+    }
+
+    if (state is AuthUiState.PasswordChangeRequired) {
+        val data = state as AuthUiState.PasswordChangeRequired
+        ChangePasswordScreen(
+            email = data.email,
+            onChangeClick = { old, new ->
+                authViewModel.changePassword(data.email, old, new)
+            },
+            isLoading = false
+        )
+    } else {
+        LoginScreen(
+            // Передаем сохраненные данные
+            initialLogin = savedCreds.first,
+            initialPass = savedCreds.second,
+            onLoginClick = { login, pass, rememberMe ->
+                // Передаем флаг "Запомнить меня" во ViewModel
+                authViewModel.login(login, pass, rememberMe)
+            },
+            // 🔥 ДОБАВИЛИ ОБРАБОТКУ КНОПКИ ГОСТЯ
+            onGuestClick = {
+                authViewModel.loginAsGuest()
+            },
+            onRegisterClick = {
+                Toast.makeText(context, "Реєстрація тільки через адміністратора", Toast.LENGTH_SHORT).show()
+            },
+            isLoading = state is AuthUiState.Loading
+        )
+    }
+}
+
+
+// =========================================================================================
+// ========================== ОСНОВНОЙ ЭКРАН ПРИЛОЖЕНИЯ ====================================
+// =========================================================================================
 
 fun constructSmartAddress(raw: String): String {
     val parts = raw.split(",").map { it.trim() }
@@ -155,7 +266,8 @@ fun constructSmartAddress(raw: String): String {
 fun MainScreen(
     repository: AppRepository,
     currentTheme: String,
-    onThemeChanged: (String) -> Unit
+    onThemeChanged: (String) -> Unit,
+    onLogout: () -> Unit = {}
 ) {
     var currentTab by remember { mutableStateOf(BottomTab.HOME) }
     var currentWorksheetsScreen by remember { mutableStateOf<AppScreen>(AppScreen.Worksheets) }
@@ -224,7 +336,8 @@ fun MainScreen(
     }
 
     var workResultForSelectedConsumer by remember { mutableStateOf<WorkResult?>(null) }
-    LaunchedEffect(selectedConsumer, currentWorksheetsScreen) {
+
+    LaunchedEffect(selectedConsumer) {
         workResultForSelectedConsumer = selectedConsumer?.let { repository.getWorkResultByConsumerId(it.id) }
     }
 
@@ -291,7 +404,6 @@ fun MainScreen(
             bottomBar = {
                 if (currentTab != BottomTab.TASKS || (currentWorksheetsScreen != AppScreen.ConsumerDetail && currentWorksheetsScreen != AppScreen.ProcessConsumer && currentWorksheetsScreen !is AppScreen.EditLocation)) {
 
-                    // 🔥 ОБНОВЛЕННАЯ ПАНЕЛЬ (Compact & High Contrast)
                     Surface(
                         modifier = Modifier.fillMaxWidth().shadow(16.dp),
                         color = MaterialTheme.colorScheme.surface,
@@ -307,8 +419,6 @@ fun MainScreen(
                         ) {
                             BottomTab.values().forEach { tab ->
                                 val isSelected = currentTab == tab
-
-                                // Цвета для активного/неактивного состояния
                                 val iconColor = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
                                 val textColor = if (isSelected) CyanAction else MaterialTheme.colorScheme.onSurfaceVariant
                                 val backgroundShape = if (isSelected) CyanAction else Color.Transparent
@@ -425,8 +535,9 @@ fun MainScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
+                                    // 🔥 ВИПРАВИЛИ: Карта -> Мапа
                                     MenuGridButton(
-                                        title = "Карта",
+                                        title = "Мапа",
                                         icon = Icons.Default.Map,
                                         modifier = Modifier.weight(1f),
                                         onClick = { currentTab = BottomTab.MAP }
@@ -476,7 +587,11 @@ fun MainScreen(
                             )
                         }
 
-                        BottomTab.PROFILE -> ProfileScreen(currentTheme = currentTheme, onThemeSelected = onThemeChanged)
+                        BottomTab.PROFILE -> ProfileScreen(
+                            currentTheme = currentTheme,
+                            onThemeSelected = onThemeChanged,
+                            onLogout = onLogout
+                        )
 
                         BottomTab.TASKS -> {
                             AnimatedContent(targetState = currentWorksheetsScreen, label = "ListAnim") { targetScreen ->
@@ -571,8 +686,11 @@ fun MainScreen(
                                             coroutineScope.launch {
                                                 repository.saveWorkResult(selectedConsumer!!.id, result)
                                                 withContext(Dispatchers.Main) {
+                                                    // Оновлюємо локальний стан
                                                     workResultForSelectedConsumer = result
-                                                    currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                                    // 🔥 ГОЛОВНА ЗМІНА: Повертаємося відразу до списку споживачів
+                                                    currentWorksheetsScreen = AppScreen.ConsumerList
+
                                                     notificationMessage = "ОР ${selectedConsumer!!.orNumber} - опрацьовано!"
                                                     notificationColor = StatusGreen
                                                 }
@@ -625,6 +743,8 @@ fun MainScreen(
         )
     }
 }
+
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (1 в 1) ---
 
 fun getFileNameFromUri(context: Context, uri: Uri): String {
     var result: String? = null
