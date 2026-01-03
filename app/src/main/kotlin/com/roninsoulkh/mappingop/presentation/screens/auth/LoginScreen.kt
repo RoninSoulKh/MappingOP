@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
@@ -19,6 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roninsoulkh.mappingop.ui.components.MappingGradientButton
@@ -31,13 +32,14 @@ fun LoginScreen(
     initialLogin: String = "",
     initialPass: String = "",
     onLoginClick: (String, String, Boolean) -> Unit,
-    onGuestClick: () -> Unit, // 🔥 Добавили колбэк для гостя
     onRegisterClick: () -> Unit,
     isLoading: Boolean = false
 ) {
     var login by remember(initialLogin) { mutableStateOf(initialLogin) }
     var password by remember(initialPass) { mutableStateOf(initialPass) }
     var isRememberMe by remember(initialLogin) { mutableStateOf(initialLogin.isNotEmpty()) }
+
+    // false = скрыто (точки), true = видно (текст)
     var isPasswordVisible by remember { mutableStateOf(false) }
 
     Column(
@@ -73,16 +75,18 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 🔥 ФИКС ГЛАЗИКА
         MappingTextField(
             value = password,
             onValueChange = { password = it },
             label = "Пароль",
             icon = Icons.Default.Lock,
             keyboardType = KeyboardType.Password,
+            visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                     Icon(
-                        imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        imageVector = if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                         contentDescription = null,
                         tint = CyanAction
                     )
@@ -142,15 +146,5 @@ fun LoginScreen(
             fontWeight = FontWeight.Medium,
             modifier = Modifier.clickable { onRegisterClick() }
         )
-
-        // --- 🔥 КНОПКА ДЛЯ ТЕСТОВ (ГОСТЬ) ---
-        Spacer(modifier = Modifier.weight(1f))
-        TextButton(onClick = onGuestClick) {
-            Text(
-                "Увійти в автономному режимі (Dev)",
-                color = Color.Gray,
-                fontSize = 12.sp
-            )
-        }
     }
 }

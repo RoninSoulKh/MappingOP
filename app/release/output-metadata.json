@@ -11,8 +11,8 @@
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 10,
-      "versionName": "2.0.0-UI/UX",
+      "versionCode": 11,
+      "versionName": "2.1.0-Enterprise-Secure",
       "outputFile": "app-release.apk"
     }
   ],

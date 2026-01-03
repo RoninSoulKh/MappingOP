@@ -1,120 +1,115 @@
 package com.roninsoulkh.mappingop.presentation.screens.auth
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockReset
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.roninsoulkh.mappingop.ui.components.MappingGradientButton
-import com.roninsoulkh.mappingop.ui.components.MappingTextField
 import com.roninsoulkh.mappingop.ui.theme.CyanAction
-import com.roninsoulkh.mappingop.ui.theme.DarkBackground
-import com.roninsoulkh.mappingop.ui.theme.StatusRed
 
 @Composable
 fun ChangePasswordScreen(
     email: String,
-    onChangeClick: (String, String) -> Unit, // oldPass, newPass
-    isLoading: Boolean = false
+    // 🔥 ТУТ ИЗМЕНЕНИЕ: Теперь принимаем 3 строки (old, new, confirm)
+    onChangeClick: (String, String, String) -> Unit,
+    isLoading: Boolean
 ) {
     var oldPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") } // 🔥 Новое поле
 
-    val isMatch = newPassword.isNotEmpty() && newPassword == confirmPassword
-    val isReady = oldPassword.isNotEmpty() && isMatch
+    var passwordVisible by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.LockReset,
-            contentDescription = null,
-            tint = CyanAction,
-            modifier = Modifier.size(64.dp)
+        Text(
+            text = "Зміна пароля",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Для користувача: $email",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(
-            text = "Зміна пароля",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Система вимагає змінити тимчасовий пароль.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.7f)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        MappingTextField(
+        // 1. Старый пароль
+        OutlinedTextField(
             value = oldPassword,
             onValueChange = { oldPassword = it },
-            label = "Старий пароль",
-            icon = Icons.Default.Lock,
-            keyboardType = KeyboardType.Password
+            label = { Text("Старий пароль") },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = "Toggle password"
+                    )
+                }
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        MappingTextField(
+        // 2. Новый пароль
+        OutlinedTextField(
             value = newPassword,
             onValueChange = { newPassword = it },
-            label = "Новий пароль",
-            icon = Icons.Default.Lock,
-            keyboardType = KeyboardType.Password
+            label = { Text("Новий пароль") },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        MappingTextField(
+        // 3. 🔥 Подтверждение пароля (НОВОЕ)
+        OutlinedTextField(
             value = confirmPassword,
             onValueChange = { confirmPassword = it },
-            label = "Підтвердіть пароль",
-            icon = Icons.Default.Lock,
-            keyboardType = KeyboardType.Password
+            label = { Text("Підтвердіть новий пароль") },
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+            isError = newPassword.isNotEmpty() && confirmPassword.isNotEmpty() && newPassword != confirmPassword,
+            supportingText = {
+                if (newPassword.isNotEmpty() && confirmPassword.isNotEmpty() && newPassword != confirmPassword) {
+                    Text("Паролі не співпадають", color = MaterialTheme.colorScheme.error)
+                }
+            }
         )
 
-        if (newPassword.isNotEmpty() && confirmPassword.isNotEmpty() && !isMatch) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Warning, null, tint = StatusRed, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Паролі не співпадають", color = StatusRed, style = MaterialTheme.typography.labelSmall)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { onChangeClick(oldPassword, newPassword, confirmPassword) },
+            enabled = !isLoading && oldPassword.isNotBlank() && newPassword.isNotBlank() && newPassword == confirmPassword,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CyanAction)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+            } else {
+                Text("Змінити пароль")
             }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        if (isLoading) {
-            CircularProgressIndicator(color = CyanAction)
-        } else {
-            MappingGradientButton(
-                text = "Змінити пароль",
-                onClick = {
-                    if (isReady) onChangeClick(oldPassword, newPassword)
-                }
-            )
         }
     }
 }

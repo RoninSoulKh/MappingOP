@@ -7,7 +7,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// --- ЧИТАЕМ КЛЮЧ ИЗ local.properties (Безопасно) ---
+// --- ЧИТАЕМ КЛЮЧИ ИЗ local.properties ---
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
@@ -15,7 +15,10 @@ if (localPropertiesFile.exists()) {
         localProperties.load(stream)
     }
 }
+
+// Читаем переменные
 val visicomKey = localProperties.getProperty("visicom.api.key") ?: ""
+val serverUrl = localProperties.getProperty("server.url") ?: ""
 
 android {
     namespace = "com.roninsoulkh.mappingop"
@@ -25,14 +28,17 @@ android {
         applicationId = "com.roninsoulkh.mappingop"
         minSdk = 33
         targetSdk = 36
-        versionCode = 10
-        versionName = "2.0.0-UI/UX"
+        versionCode = 11
+        versionName = "2.1.0-Enterprise-Secure"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "app_name", "Mapping OP")
 
-        // --- КЛЮЧ ---
+        // --- ВНЕДРЯЕМ КЛЮЧИ В BuildConfig ---
         buildConfigField("String", "VISICOM_KEY", "\"$visicomKey\"")
+
+        // 🔥 Внедряем SERVER_URL
+        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
 
         // Настройки Room
         javaCompileOptions {
@@ -110,12 +116,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // ROOM DATABASE (ИСПРАВЛЕНО ТУТ 👇)
+    // ROOM DATABASE
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
     kaptTest("androidx.room:room-compiler:2.6.1")
-    // kaptAndroidTest("androidx.room:room-compiler:2.6.1")
 
     // EXCEL (APACHE POI)
     implementation("org.apache.poi:poi-ooxml:5.2.5")
@@ -130,24 +135,20 @@ dependencies {
 
     // TESTING
     testImplementation("junit:junit:4.13.2")
-    // androidTestImplementation("androidx.test.ext:junit:1.3.0")
-    // androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
-    // androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.00"))
-    // androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 
     // DEBUG
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // DataStore (хранение настроек и токенов)
+    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // NETWORK (RETROFIT)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
     implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
-    // ViewModel для Compose
+
+    // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 }

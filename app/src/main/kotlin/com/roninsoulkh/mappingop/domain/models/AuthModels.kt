@@ -1,17 +1,18 @@
 package com.roninsoulkh.mappingop.domain.models
 
-// Исправили username -> email
 data class LoginRequest(
     val email: String,
     val password: String
 )
 
 data class LoginResponse(
-    val message: String?,
-    val status: String?
+    val status: String,
+    val user_id: Int,
+    val username: String,
+    val token: String? = null,
+    val requires_password_change: Boolean
 )
 
-// Тут тоже на всякий случай проверим, но пока оставим как было
 data class RegisterRequest(
     val username: String,
     val email: String,
@@ -26,7 +27,15 @@ data class VerifyCodeRequest(
 data class ChangePasswordRequest(
     val email: String,
     val old_password: String,
-    val new_password: String
+    val new_password: String,
+    val confirm_password: String
+)
+
+data class ChangePasswordResponse(
+    val status: String,
+    val message: String,
+    val token: String? = null,
+    val requires_password_change: Boolean
 )
 
 data class VersionResponse(

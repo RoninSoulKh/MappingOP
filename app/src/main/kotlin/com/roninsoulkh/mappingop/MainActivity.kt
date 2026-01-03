@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,7 +42,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-// --- Твои импорты ---
 import com.roninsoulkh.mappingop.data.parser.ExcelParser
 import com.roninsoulkh.mappingop.domain.models.Consumer
 import com.roninsoulkh.mappingop.domain.models.WorkResult
@@ -59,12 +57,11 @@ import com.roninsoulkh.mappingop.ui.theme.CyanAction
 import com.roninsoulkh.mappingop.ui.theme.StatusGreen
 import com.roninsoulkh.mappingop.ui.theme.StatusRed
 
-// --- ИМПОРТЫ АВТОРИЗАЦИИ ---
 import com.roninsoulkh.mappingop.data.local.TokenManager
 import com.roninsoulkh.mappingop.data.repository.AuthRepository
+import com.roninsoulkh.mappingop.data.remote.RetrofitClient
 import com.roninsoulkh.mappingop.presentation.screens.auth.ChangePasswordScreen
 import com.roninsoulkh.mappingop.presentation.screens.auth.LoginScreen
-import com.roninsoulkh.mappingop.presentation.screens.auth.RegisterScreen
 import com.roninsoulkh.mappingop.presentation.viewmodels.AuthUiState
 import com.roninsoulkh.mappingop.presentation.viewmodels.AuthViewModel
 import com.roninsoulkh.mappingop.presentation.viewmodels.AuthViewModelFactory
@@ -79,7 +76,6 @@ import org.osmdroid.util.GeoPoint
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
 
-    // Инициализация слоев данных
     private val appRepository by lazy { AppRepository(this) }
     private val tokenManager by lazy { TokenManager(this) }
     private val authRepository by lazy { AuthRepository(tokenManager) }
@@ -92,10 +88,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        RetrofitClient.initialize(tokenManager)
+
         setContent {
             val context = LocalContext.current
 
-            // --- ТЕМА ---
             var currentThemeSetting by remember { mutableStateOf(SettingsManager.getTheme(context)) }
             val useDarkTheme = when (currentThemeSetting) {
                 "Light" -> false
@@ -113,16 +110,18 @@ class MainActivity : ComponentActivity() {
             }
 
             MappingOPTheme(darkTheme = useDarkTheme) {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                var notificationMessage by remember { mutableStateOf<String?>(null) }
+                var notificationColor by remember { mutableStateOf(StatusGreen) }
 
-                    // --- 🔥 АВТОРИЗАЦИЯ ---
+                val showNotification: (String, Boolean) -> Unit = { message, isError ->
+                    notificationMessage = message
+                    notificationColor = if (isError) StatusRed else StatusGreen
+                }
 
-                    // 1. Создаем ViewModel (передаем tokenManager в фабрику!)
+                Box(modifier = Modifier.fillMaxSize()) {
                     val authViewModel: AuthViewModel = viewModel(
                         factory = AuthViewModelFactory(authRepository, tokenManager)
                     )
-
-                    // 2. Слушаем состояние входа
                     val isLoggedInState by tokenManager.isLoggedIn.collectAsState(initial = null)
 
                     AnimatedContent(
@@ -132,13 +131,11 @@ class MainActivity : ComponentActivity() {
                     ) { loggedIn ->
                         when (loggedIn) {
                             null -> {
-                                // Загрузка (сплэш)
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     CircularProgressIndicator(color = CyanAction)
                                 }
                             }
                             true -> {
-                                // Главный экран (если вошли)
                                 MainScreen(
                                     repository = appRepository,
                                     currentTheme = currentThemeSetting,
@@ -146,18 +143,25 @@ class MainActivity : ComponentActivity() {
                                         SettingsManager.saveTheme(context, newTheme)
                                         currentThemeSetting = newTheme
                                     },
-                                    onLogout = {
-                                        // 🔥 СВЯЗАЛИ КНОПКУ ВЫХОДА С VIEWMODEL
-                                        authViewModel.logout()
-                                    }
+                                    onLogout = { authViewModel.logout() },
+                                    onShowNotification = showNotification
                                 )
                             }
                             false -> {
-                                // Экран авторизации (если не вошли)
-                                AuthFlow(authViewModel = authViewModel)
+                                AuthFlow(
+                                    authViewModel = authViewModel,
+                                    onShowNotification = showNotification
+                                )
                             }
                         }
                     }
+
+                    TopSuccessNotification(
+                        message = notificationMessage ?: "",
+                        isVisible = notificationMessage != null,
+                        onDismiss = { notificationMessage = null },
+                        backgroundColor = notificationColor
+                    )
                 }
             }
         }
@@ -170,18 +174,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- 🔥 ЛОГИКА ЭКРАНОВ АВТОРИЗАЦИИ ---
+// --- AUTH LOGIC ---
 @Composable
-fun AuthFlow(authViewModel: AuthViewModel) {
+fun AuthFlow(
+    authViewModel: AuthViewModel,
+    onShowNotification: (String, Boolean) -> Unit
+) {
     val state by authViewModel.uiState.collectAsState()
-
-    // Получаем сохраненные логин/пароль из ViewModel
     val savedCreds by authViewModel.savedCredentials.collectAsState()
 
-    val context = LocalContext.current
     LaunchedEffect(state) {
         if (state is AuthUiState.Error) {
-            Toast.makeText(context, (state as AuthUiState.Error).message, Toast.LENGTH_LONG).show()
+            onShowNotification((state as AuthUiState.Error).message, true)
             authViewModel.clearError()
         }
     }
@@ -190,40 +194,29 @@ fun AuthFlow(authViewModel: AuthViewModel) {
         val data = state as AuthUiState.PasswordChangeRequired
         ChangePasswordScreen(
             email = data.email,
-            onChangeClick = { old, new ->
-                authViewModel.changePassword(data.email, old, new)
+            onChangeClick = { old, new, confirm ->
+                authViewModel.changePassword(data.email, old, new, confirm)
             },
             isLoading = false
         )
     } else {
         LoginScreen(
-            // Передаем сохраненные данные
             initialLogin = savedCreds.first,
             initialPass = savedCreds.second,
             onLoginClick = { login, pass, rememberMe ->
-                // Передаем флаг "Запомнить меня" во ViewModel
                 authViewModel.login(login, pass, rememberMe)
             },
-            // 🔥 ДОБАВИЛИ ОБРАБОТКУ КНОПКИ ГОСТЯ
-            onGuestClick = {
-                authViewModel.loginAsGuest()
-            },
             onRegisterClick = {
-                Toast.makeText(context, "Реєстрація тільки через адміністратора", Toast.LENGTH_SHORT).show()
+                onShowNotification("Реєстрація тільки через адміністратора", false)
             },
             isLoading = state is AuthUiState.Loading
         )
     }
 }
 
-
-// =========================================================================================
-// ========================== ОСНОВНОЙ ЭКРАН ПРИЛОЖЕНИЯ ====================================
-// =========================================================================================
-
+// --- MAIN SCREEN ---
 fun constructSmartAddress(raw: String): String {
     val parts = raw.split(",").map { it.trim() }
-
     var zipCode = ""
     var settlement = ""
     var street = ""
@@ -267,11 +260,11 @@ fun MainScreen(
     repository: AppRepository,
     currentTheme: String,
     onThemeChanged: (String) -> Unit,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit,
+    onShowNotification: (String, Boolean) -> Unit
 ) {
     var currentTab by remember { mutableStateOf(BottomTab.HOME) }
     var currentWorksheetsScreen by remember { mutableStateOf<AppScreen>(AppScreen.Worksheets) }
-
     var isNavigatedFromMap by remember { mutableStateOf(false) }
 
     var selectedWorksheetId by remember { mutableStateOf<String?>(null) }
@@ -281,9 +274,6 @@ fun MainScreen(
     var mapCenterState by remember { mutableStateOf(GeoPoint(50.0, 36.23)) }
     var mapZoomState by remember { mutableStateOf(13.0) }
     var mapCameraTarget by remember { mutableStateOf<GeoPoint?>(null) }
-
-    var notificationMessage by remember { mutableStateOf<String?>(null) }
-    var notificationColor by remember { mutableStateOf(StatusGreen) }
 
     BackHandler(enabled = currentTab != BottomTab.HOME || currentWorksheetsScreen != AppScreen.Worksheets) {
         if (currentTab == BottomTab.TASKS) {
@@ -352,19 +342,15 @@ fun MainScreen(
                         val consumers = ExcelParser().parseWorkbook(inputStream, worksheetId)
                         if (consumers.isNotEmpty()) {
                             repository.addWorksheet(fileName, consumers)
-                            notificationMessage = "Файл успішно завантажено"
-                            notificationColor = StatusGreen
-
+                            onShowNotification("Файл успішно завантажено", false)
                             currentTab = BottomTab.TASKS
                             currentWorksheetsScreen = AppScreen.Worksheets
                         } else {
-                            notificationMessage = "Файл пустий або пошкоджений"
-                            notificationColor = StatusRed
+                            onShowNotification("Файл пустий або пошкоджений", true)
                         }
                     }
                 }.onFailure {
-                    notificationMessage = "Помилка: ${it.message}"
-                    notificationColor = StatusRed
+                    onShowNotification("Помилка: ${it.message}", true)
                 }
             }
         }
@@ -397,354 +383,324 @@ fun MainScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-
-        Scaffold(
-            floatingActionButtonPosition = FabPosition.Start,
-            bottomBar = {
-                if (currentTab != BottomTab.TASKS || (currentWorksheetsScreen != AppScreen.ConsumerDetail && currentWorksheetsScreen != AppScreen.ProcessConsumer && currentWorksheetsScreen !is AppScreen.EditLocation)) {
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().shadow(16.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 8.dp
+    Scaffold(
+        floatingActionButtonPosition = FabPosition.Start,
+        bottomBar = {
+            if (currentTab != BottomTab.TASKS || (currentWorksheetsScreen != AppScreen.ConsumerDetail && currentWorksheetsScreen != AppScreen.ProcessConsumer && currentWorksheetsScreen !is AppScreen.EditLocation)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().shadow(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .navigationBarsPadding(),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .navigationBarsPadding(),
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BottomTab.values().forEach { tab ->
-                                val isSelected = currentTab == tab
-                                val iconColor = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
-                                val textColor = if (isSelected) CyanAction else MaterialTheme.colorScheme.onSurfaceVariant
-                                val backgroundShape = if (isSelected) CyanAction else Color.Transparent
+                        BottomTab.values().forEach { tab ->
+                            val isSelected = currentTab == tab
+                            val iconColor = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                            val textColor = if (isSelected) CyanAction else MaterialTheme.colorScheme.onSurfaceVariant
+                            val backgroundShape = if (isSelected) CyanAction else Color.Transparent
 
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) {
-                                            if (tab == BottomTab.TASKS) {
-                                                currentWorksheetsScreen = AppScreen.Worksheets
-                                                selectedConsumer = null
-                                                isNavigatedFromMap = false
-                                            }
-                                            currentTab = tab
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .height(32.dp)
-                                            .width(56.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(backgroundShape),
-                                        contentAlignment = Alignment.Center
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
                                     ) {
-                                        Icon(
-                                            imageVector = tab.icon,
-                                            contentDescription = tab.label,
-                                            tint = iconColor,
-                                            modifier = Modifier.size(22.dp)
-                                        )
+                                        if (tab == BottomTab.TASKS) {
+                                            currentWorksheetsScreen = AppScreen.Worksheets
+                                            selectedConsumer = null
+                                            isNavigatedFromMap = false
+                                        }
+                                        currentTab = tab
                                     }
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    Text(
-                                        text = tab.label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = textColor,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 11.sp
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .height(32.dp)
+                                        .width(56.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(backgroundShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = tab.icon,
+                                        contentDescription = tab.label,
+                                        tint = iconColor,
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = tab.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 11.sp
+                                )
                             }
                         }
                     }
                 }
-            },
-        ) { paddingValues ->
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = paddingValues.calculateBottomPadding())
-            ) {
-                AnimatedContent(targetState = currentTab, label = "TabAnim") { targetTab ->
-                    when (targetTab) {
-                        BottomTab.HOME -> {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.background)
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.Start
+            }
+        },
+    ) { paddingValues ->
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = paddingValues.calculateBottomPadding())
+        ) {
+            AnimatedContent(targetState = currentTab, label = "TabAnim") { targetTab ->
+                when (targetTab) {
+                    BottomTab.HOME -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background)
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Text(
+                                text = "Привіт, Владислав",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = "Гарного дня для роботи!",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                Spacer(modifier = Modifier.height(32.dp))
-
-                                Text(
-                                    text = "Привіт, Владислав",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.onBackground
+                                val totalConsumers = worksheets.sumOf { it.totalConsumers }
+                                StatCard(
+                                    title = "Завантажено точок",
+                                    value = "$totalConsumers",
+                                    modifier = Modifier.weight(1f)
                                 )
-                                Text(
-                                    text = "Гарного дня для роботи!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                StatCard(
+                                    title = "Загальний борг",
+                                    value = "--- грн",
+                                    modifier = Modifier.weight(1f),
+                                    valueColor = MaterialTheme.colorScheme.error
                                 )
+                            }
 
-                                Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(32.dp))
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    val totalConsumers = worksheets.sumOf { it.totalConsumers }
+                            MappingGradientButton(
+                                text = "ЗАВАНТАЖИТИ EXCEL",
+                                icon = Icons.Default.FileUpload,
+                                onClick = { launchImport = true }
+                            )
 
-                                    StatCard(
-                                        title = "Завантажено точок",
-                                        value = "$totalConsumers",
-                                        modifier = Modifier.weight(1f)
-                                    )
+                            Spacer(modifier = Modifier.height(24.dp))
 
-                                    StatCard(
-                                        title = "Загальний борг",
-                                        value = "--- грн",
-                                        modifier = Modifier.weight(1f),
-                                        valueColor = MaterialTheme.colorScheme.error
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(32.dp))
-
-                                MappingGradientButton(
-                                    text = "ЗАВАНТАЖИТИ EXCEL",
-                                    icon = Icons.Default.FileUpload,
-                                    onClick = { launchImport = true }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                MenuGridButton(
+                                    title = "Мапа",
+                                    icon = Icons.Default.Map,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { currentTab = BottomTab.MAP }
                                 )
-
-                                Spacer(modifier = Modifier.height(24.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    // 🔥 ВИПРАВИЛИ: Карта -> Мапа
-                                    MenuGridButton(
-                                        title = "Мапа",
-                                        icon = Icons.Default.Map,
-                                        modifier = Modifier.weight(1f),
-                                        onClick = { currentTab = BottomTab.MAP }
-                                    )
-
-                                    MenuGridButton(
-                                        title = "Звіти",
-                                        icon = Icons.Default.Description,
-                                        modifier = Modifier.weight(1f),
-                                        onClick = {
-                                            currentTab = BottomTab.TASKS
-                                            currentWorksheetsScreen = AppScreen.WorkResults
-                                        }
-                                    )
-                                }
+                                MenuGridButton(
+                                    title = "Звіти",
+                                    icon = Icons.Default.Description,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        currentTab = BottomTab.TASKS
+                                        currentWorksheetsScreen = AppScreen.WorkResults
+                                    }
+                                )
                             }
                         }
+                    }
 
-                        BottomTab.MAP -> {
-                            MapScreen(
-                                worksheets = worksheets,
-                                consumers = mapConsumersList,
-                                totalCount = totalConsumersCount,
-                                foundCount = foundCoordinatesCount,
-                                initialCenter = mapCenterState,
-                                initialZoom = mapZoomState,
-                                cameraTarget = mapCameraTarget,
-                                onCameraTargetSettled = { mapCameraTarget = null },
-                                onMapStateChanged = { center, zoom ->
-                                    mapCenterState = center
-                                    mapZoomState = zoom
-                                },
-                                onWorksheetSelected = { worksheet ->
-                                    selectedMapWorksheetId = worksheet.id
-                                    geoService.startForWorksheet(worksheet.id)
-                                    notificationMessage = "Запуск пошуку адрес..."
-                                    notificationColor = CyanAction
-                                },
-                                onConsumerClick = { consumer ->
-                                    selectedConsumer = consumer
-                                    isNavigatedFromMap = true
-                                    currentTab = BottomTab.TASKS
-                                    currentWorksheetsScreen = AppScreen.ConsumerDetail
-                                },
-                                isGeocoding = isGeocoding,
-                                progress = geoProgress
-                            )
-                        }
-
-                        BottomTab.PROFILE -> ProfileScreen(
-                            currentTheme = currentTheme,
-                            onThemeSelected = onThemeChanged,
-                            onLogout = onLogout
+                    BottomTab.MAP -> {
+                        MapScreen(
+                            worksheets = worksheets,
+                            consumers = mapConsumersList,
+                            totalCount = totalConsumersCount,
+                            foundCount = foundCoordinatesCount,
+                            initialCenter = mapCenterState,
+                            initialZoom = mapZoomState,
+                            cameraTarget = mapCameraTarget,
+                            onCameraTargetSettled = { mapCameraTarget = null },
+                            onMapStateChanged = { center, zoom ->
+                                mapCenterState = center
+                                mapZoomState = zoom
+                            },
+                            onWorksheetSelected = { worksheet ->
+                                selectedMapWorksheetId = worksheet.id
+                                geoService.startForWorksheet(worksheet.id)
+                                onShowNotification("Запуск пошуку адрес...", false)
+                            },
+                            onConsumerClick = { consumer ->
+                                selectedConsumer = consumer
+                                isNavigatedFromMap = true
+                                currentTab = BottomTab.TASKS
+                                currentWorksheetsScreen = AppScreen.ConsumerDetail
+                            },
+                            isGeocoding = isGeocoding,
+                            progress = geoProgress
                         )
+                    }
 
-                        BottomTab.TASKS -> {
-                            AnimatedContent(targetState = currentWorksheetsScreen, label = "ListAnim") { targetScreen ->
-                                when (targetScreen) {
-                                    AppScreen.Worksheets -> WorksheetsScreen(
-                                        worksheets = worksheets,
-                                        onWorksheetClick = { ws ->
-                                            selectedWorksheetId = ws.id
-                                            isNavigatedFromMap = false
+                    BottomTab.PROFILE -> ProfileScreen(
+                        currentTheme = currentTheme,
+                        onThemeSelected = onThemeChanged,
+                        onLogout = onLogout
+                    )
+
+                    BottomTab.TASKS -> {
+                        AnimatedContent(targetState = currentWorksheetsScreen, label = "ListAnim") { targetScreen ->
+                            when (targetScreen) {
+                                AppScreen.Worksheets -> WorksheetsScreen(
+                                    worksheets = worksheets,
+                                    onWorksheetClick = { ws ->
+                                        selectedWorksheetId = ws.id
+                                        isNavigatedFromMap = false
+                                        currentWorksheetsScreen = AppScreen.ConsumerList
+                                    },
+                                    onAddWorksheet = { launchImport = true },
+                                    onDeleteWorksheet = { ws -> coroutineScope.launch { repository.deleteWorksheet(ws) } },
+                                    onRenameWorksheet = { ws, name -> coroutineScope.launch { repository.renameWorksheet(ws, name) } },
+                                    onViewResults = { currentWorksheetsScreen = AppScreen.WorkResults },
+                                    onBackClick = {}
+                                )
+                                AppScreen.ConsumerList -> ConsumerListScreen(
+                                    consumers = worksheetConsumers,
+                                    onConsumerClick = { c ->
+                                        selectedConsumer = c
+                                        isNavigatedFromMap = false
+                                        currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                    },
+                                    onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets }
+                                )
+
+                                AppScreen.ConsumerDetail -> ConsumerDetailScreen(
+                                    consumer = selectedConsumer!!,
+                                    workResult = workResultForSelectedConsumer,
+                                    onBackClick = {
+                                        if (isNavigatedFromMap) {
+                                            currentTab = BottomTab.MAP
+                                        } else {
                                             currentWorksheetsScreen = AppScreen.ConsumerList
-                                        },
-                                        onAddWorksheet = { launchImport = true },
-                                        onDeleteWorksheet = { ws -> coroutineScope.launch { repository.deleteWorksheet(ws) } },
-                                        onRenameWorksheet = { ws, name -> coroutineScope.launch { repository.renameWorksheet(ws, name) } },
-                                        onViewResults = { currentWorksheetsScreen = AppScreen.WorkResults },
-                                        onBackClick = {}
-                                    )
-                                    AppScreen.ConsumerList -> ConsumerListScreen(
-                                        consumers = worksheetConsumers,
-                                        onConsumerClick = { c ->
-                                            selectedConsumer = c
-                                            isNavigatedFromMap = false
-                                            currentWorksheetsScreen = AppScreen.ConsumerDetail
-                                        },
-                                        onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets }
-                                    )
-
-                                    AppScreen.ConsumerDetail -> ConsumerDetailScreen(
-                                        consumer = selectedConsumer!!,
-                                        workResult = workResultForSelectedConsumer,
-                                        onBackClick = {
-                                            if (isNavigatedFromMap) {
+                                        }
+                                    },
+                                    onProcessClick = { currentWorksheetsScreen = AppScreen.ProcessConsumer },
+                                    onManualLocationClick = {
+                                        currentWorksheetsScreen = AppScreen.EditLocation(selectedConsumer!!)
+                                    },
+                                    onMapClick = {
+                                        selectedConsumer?.let { consumer ->
+                                            if (consumer.latitude != null && consumer.latitude != 0.0) {
+                                                mapCameraTarget = GeoPoint(consumer.latitude!!, consumer.longitude!!)
                                                 currentTab = BottomTab.MAP
+                                                onShowNotification("Перехід на карту...", false)
                                             } else {
-                                                currentWorksheetsScreen = AppScreen.ConsumerList
-                                            }
-                                        },
-                                        onProcessClick = { currentWorksheetsScreen = AppScreen.ProcessConsumer },
-                                        onManualLocationClick = {
-                                            currentWorksheetsScreen = AppScreen.EditLocation(selectedConsumer!!)
-                                        },
-                                        onMapClick = {
-                                            selectedConsumer?.let { consumer ->
-                                                if (consumer.latitude != null && consumer.latitude != 0.0) {
-                                                    mapCameraTarget = GeoPoint(consumer.latitude!!, consumer.longitude!!)
-                                                    currentTab = BottomTab.MAP
-                                                    notificationMessage = "Перехід на карту..."
-                                                    notificationColor = StatusGreen
-                                                } else {
-                                                    notificationMessage = "Пошук координат..."
-                                                    notificationColor = CyanAction
-                                                    val smartAddress = constructSmartAddress(consumer.rawAddress)
-                                                    AddressHelper.searchAddress(smartAddress) { location ->
-                                                        coroutineScope.launch(Dispatchers.Main) {
-                                                            if (location == null) {
-                                                                notificationMessage = "Не знайдено! Перевірте адресу"
-                                                                notificationColor = StatusRed
-                                                            } else {
-                                                                consumer.latitude = location.lat
-                                                                consumer.longitude = location.lng
-                                                                repository.updateConsumer(consumer)
-                                                                notificationMessage = "Знайдено! Натисніть ще раз"
-                                                                notificationColor = StatusGreen
-                                                            }
+                                                onShowNotification("Пошук координат...", false)
+                                                val smartAddress = constructSmartAddress(consumer.rawAddress)
+                                                AddressHelper.searchAddress(smartAddress) { location ->
+                                                    coroutineScope.launch(Dispatchers.Main) {
+                                                        if (location == null) {
+                                                            onShowNotification("Не знайдено! Перевірте адресу", true)
+                                                        } else {
+                                                            consumer.latitude = location.lat
+                                                            consumer.longitude = location.lng
+                                                            repository.updateConsumer(consumer)
+                                                            onShowNotification("Знайдено! Натисніть ще раз", false)
                                                         }
                                                     }
                                                 }
                                             }
                                         }
-                                    )
+                                    }
+                                )
 
-                                    is AppScreen.EditLocation -> EditLocationScreen(
-                                        consumer = targetScreen.consumer,
-                                        onSave = { lat, lng ->
-                                            val c = targetScreen.consumer
-                                            c.latitude = lat
-                                            c.longitude = lng
-                                            coroutineScope.launch {
-                                                repository.updateConsumer(c)
-                                                notificationMessage = "Координати збережено вручну"
-                                                notificationColor = StatusGreen
-                                                currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                is AppScreen.EditLocation -> EditLocationScreen(
+                                    consumer = targetScreen.consumer,
+                                    onSave = { lat, lng ->
+                                        val c = targetScreen.consumer
+                                        c.latitude = lat
+                                        c.longitude = lng
+                                        coroutineScope.launch {
+                                            repository.updateConsumer(c)
+                                            onShowNotification("Координати збережено вручну", false)
+                                            currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                        }
+                                    },
+                                    onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
+                                )
+
+                                AppScreen.ProcessConsumer -> ProcessConsumerScreen(
+                                    consumer = selectedConsumer!!,
+                                    initialResult = workResultForSelectedConsumer,
+                                    onSave = { result ->
+                                        coroutineScope.launch {
+                                            repository.saveWorkResult(selectedConsumer!!.id, result)
+                                            withContext(Dispatchers.Main) {
+                                                workResultForSelectedConsumer = result
+                                                currentWorksheetsScreen = AppScreen.ConsumerList
+                                                onShowNotification("ОР ${selectedConsumer!!.orNumber} - опрацьовано!", false)
                                             }
-                                        },
-                                        onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
-                                    )
+                                        }
+                                    },
+                                    onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
+                                )
 
-                                    AppScreen.ProcessConsumer -> ProcessConsumerScreen(
-                                        consumer = selectedConsumer!!,
-                                        initialResult = workResultForSelectedConsumer,
-                                        onSave = { result ->
-                                            coroutineScope.launch {
-                                                repository.saveWorkResult(selectedConsumer!!.id, result)
-                                                withContext(Dispatchers.Main) {
-                                                    // Оновлюємо локальний стан
-                                                    workResultForSelectedConsumer = result
-                                                    // 🔥 ГОЛОВНА ЗМІНА: Повертаємося відразу до списку споживачів
-                                                    currentWorksheetsScreen = AppScreen.ConsumerList
-
-                                                    notificationMessage = "ОР ${selectedConsumer!!.orNumber} - опрацьовано!"
-                                                    notificationColor = StatusGreen
+                                AppScreen.WorkResults -> WorkResultsScreen(
+                                    worksheets = worksheets,
+                                    onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets },
+                                    onExportClick = { worksheet ->
+                                        onShowNotification("Генерую звіт...", false)
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            try {
+                                                val consumers = repository.getConsumersFlow(worksheet.id).first()
+                                                val dataForExport = consumers.map { consumer ->
+                                                    val result = repository.getWorkResultByConsumerId(consumer.id)
+                                                    consumer to result
                                                 }
-                                            }
-                                        },
-                                        onCancel = { currentWorksheetsScreen = AppScreen.ConsumerDetail }
-                                    )
-
-                                    AppScreen.WorkResults -> WorkResultsScreen(
-                                        worksheets = worksheets,
-                                        onBackClick = { currentWorksheetsScreen = AppScreen.Worksheets },
-                                        onExportClick = { worksheet ->
-                                            notificationMessage = "Генерую звіт..."
-                                            notificationColor = CyanAction
-                                            coroutineScope.launch(Dispatchers.IO) {
-                                                try {
-                                                    val consumers = repository.getConsumersFlow(worksheet.id).first()
-                                                    val dataForExport = consumers.map { consumer ->
-                                                        val result = repository.getWorkResultByConsumerId(consumer.id)
-                                                        consumer to result
-                                                    }
-                                                    val file = ExcelParser().exportWorksheet(context, worksheet.fileName, dataForExport)
-                                                    withContext(Dispatchers.Main) {
-                                                        shareExcelFile(context, file)
-                                                    }
-                                                } catch (e: Exception) {
-                                                    withContext(Dispatchers.Main) {
-                                                        notificationMessage = "Помилка експорту: ${e.message}"
-                                                        notificationColor = StatusRed
-                                                        e.printStackTrace()
-                                                    }
+                                                val file = ExcelParser().exportWorksheet(context, worksheet.fileName, dataForExport)
+                                                withContext(Dispatchers.Main) {
+                                                    shareExcelFile(context, file)
+                                                }
+                                            } catch (e: Exception) {
+                                                withContext(Dispatchers.Main) {
+                                                    onShowNotification("Помилка експорту: ${e.message}", true)
+                                                    e.printStackTrace()
                                                 }
                                             }
                                         }
-                                    )
-                                    else -> {}
-                                }
+                                    }
+                                )
+                                else -> {}
                             }
                         }
                     }
                 }
             }
         }
-
-        TopSuccessNotification(
-            message = notificationMessage ?: "",
-            isVisible = notificationMessage != null,
-            onDismiss = { notificationMessage = null },
-            backgroundColor = notificationColor
-        )
     }
 }
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (1 в 1) ---
+// --- HELPERS ---
 
 fun getFileNameFromUri(context: Context, uri: Uri): String {
     var result: String? = null

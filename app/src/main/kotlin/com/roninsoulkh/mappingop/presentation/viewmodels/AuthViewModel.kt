@@ -25,73 +25,74 @@ class AuthViewModel(
 
     init {
         viewModelScope.launch {
-            tokenManager.savedCredentials.collect { pair ->
-                _savedCredentials.value = pair
-            }
+            tokenManager.savedCredentials.collect { _savedCredentials.value = it }
         }
     }
 
-    // --- ОБЫЧНЫЙ ВХОД ---
     fun login(login: String, pass: String, rememberMe: Boolean) {
         if (login.isBlank() || pass.isBlank()) {
-            _uiState.value = AuthUiState.Error("Заповніть всі поля")
+            _uiState.value = AuthUiState.Error("Заполните все поля")
             return
         }
-
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-
-            val request = LoginRequest(email = login, password = pass)
-            val result = repository.login(request)
-
+            val result = repository.login(LoginRequest(login, pass))
             result.fold(
                 onSuccess = { response ->
-                    if (response.status == "password_change_required") {
-                        _uiState.value = AuthUiState.PasswordChangeRequired(email = login, tempPass = pass)
-                    } else {
-                        if (rememberMe) tokenManager.saveCredentials(login, pass)
-                        else tokenManager.clearCredentials()
+                    if (rememberMe) tokenManager.saveCredentials(login, pass)
+                    else tokenManager.clearCredentials()
 
-                        tokenManager.setLoggedIn(true) // Сохраняем сессию
+                    if (response.requires_password_change) {
+                        _uiState.value = AuthUiState.PasswordChangeRequired(login, pass)
+                    } else {
                         _uiState.value = AuthUiState.Success
                     }
                 },
                 onFailure = { error ->
-                    _uiState.value = AuthUiState.Error(error.message ?: "Помилка входу")
+                    _uiState.value = AuthUiState.Error(error.message ?: "Ошибка входа")
                 }
             )
         }
     }
 
-    // --- 🔥 НОВАЯ ФУНКЦИЯ: ГОСТЕВОЙ РЕЖИМ ---
+    fun changePassword(email: String, oldPass: String, newPass: String, confirmPass: String) {
+        if (newPass != confirmPass) {
+            _uiState.value = AuthUiState.Error("Пароли не совпадают")
+            return
+        }
+        if (newPass.length < 8) {
+            _uiState.value = AuthUiState.Error("Пароль должен быть не менее 8 символов")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Loading
+            val request = ChangePasswordRequest(email, oldPass, newPass, confirmPass)
+            val result = repository.changePassword(request)
+            result.fold(
+                onSuccess = { _uiState.value = AuthUiState.Success },
+                onFailure = { error -> _uiState.value = AuthUiState.Error(error.message ?: "Ошибка") }
+            )
+        }
+    }
+
+    // --- 🔥 ДОБАВЛЕННЫЕ ФУНКЦИИ (которых не хватало) ---
+
     fun loginAsGuest() {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            // Сохраняем фейковые данные, чтобы приложение думало, что мы вошли
             tokenManager.setLoggedIn(true)
             _uiState.value = AuthUiState.Success
         }
     }
 
-    // --- 🔥 НОВАЯ ФУНКЦИЯ: ВЫХОД ---
     fun logout() {
         viewModelScope.launch {
-            tokenManager.clearSession() // Удаляем "галочку" входа
-            _uiState.value = AuthUiState.Idle // Сбрасываем состояние
+            repository.logout()
+            _uiState.value = AuthUiState.Idle
         }
     }
 
-    fun changePassword(email: String, oldPass: String, newPass: String) {
-        viewModelScope.launch {
-            _uiState.value = AuthUiState.Loading
-            val request = ChangePasswordRequest(email, oldPass, newPass)
-            val result = repository.changePassword(request)
-            result.fold(
-                onSuccess = { _uiState.value = AuthUiState.Success },
-                onFailure = { error -> _uiState.value = AuthUiState.Error(error.message ?: "Помилка") }
-            )
-        }
-    }
+    // ---------------------------------------------------
 
     fun clearError() { _uiState.value = AuthUiState.Idle }
 }
@@ -104,15 +105,8 @@ sealed class AuthUiState {
     data class PasswordChangeRequired(val email: String, val tempPass: String) : AuthUiState()
 }
 
-class AuthViewModelFactory(
-    private val repository: AuthRepository,
-    private val tokenManager: TokenManager
-) : ViewModelProvider.Factory {
+class AuthViewModelFactory(private val repository: AuthRepository, private val tokenManager: TokenManager) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return AuthViewModel(repository, tokenManager) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
+        return AuthViewModel(repository, tokenManager) as T
     }
 }

@@ -88,7 +88,6 @@ fun ConsumerDetailScreen(
             )
         }
     ) { paddingValues ->
-        // Головний контейнер Column
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -96,13 +95,12 @@ fun ConsumerDetailScreen(
                 .padding(paddingValues)
         ) {
 
-            // 1. ЗОНА СКРОЛУ (Картки інформації + Кнопка координат внизу)
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp) // Уменьшили расстояние между карточками
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
 
                 // Статус
@@ -114,7 +112,7 @@ fun ConsumerDetailScreen(
                                 if (consumer.isProcessed) StatusGreen.copy(alpha = 0.2f)
                                 else StatusRed.copy(alpha = 0.2f)
                             )
-                            .padding(12.dp), // Чуть меньше padding
+                            .padding(12.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -137,7 +135,6 @@ fun ConsumerDetailScreen(
                 // Головна інфо
                 MappingCard {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // ОР
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Filled.Numbers,
@@ -163,7 +160,6 @@ fun ConsumerDetailScreen(
                         Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Адреса
                         Row(verticalAlignment = Alignment.Top) {
                             Icon(
                                 imageVector = Icons.Filled.Home,
@@ -190,7 +186,6 @@ fun ConsumerDetailScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Контрагент
                         Row(verticalAlignment = Alignment.Top) {
                             Icon(
                                 imageVector = Icons.Filled.Person,
@@ -230,7 +225,6 @@ fun ConsumerDetailScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Row(modifier = Modifier.fillMaxWidth()) {
-                            // Борг
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "Сума боргу",
@@ -246,7 +240,6 @@ fun ConsumerDetailScreen(
                                 )
                             }
 
-                            // Лічильник
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "Номер лічильника",
@@ -264,8 +257,6 @@ fun ConsumerDetailScreen(
                     }
                 }
 
-                // 🔥 КНОПКА ЗМІНИ КООРДИНАТ ПЕРЕНЕСЕНА СЮДИ
-                // Вона тепер частина списку і не заважає знизу
                 Spacer(modifier = Modifier.height(4.dp))
                 OutlinedButton(
                     onClick = onManualLocationClick,
@@ -294,11 +285,9 @@ fun ConsumerDetailScreen(
                     )
                 }
 
-                // Додатковий відступ знизу, щоб кнопка не прилипала до краю
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 🔥 2. КОМПАКТНА ПАНЕЛЬ ЗНИЗУ (Тільки одна кнопка)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface,
@@ -319,7 +308,6 @@ fun ConsumerDetailScreen(
         }
     }
 
-    // --- ДІАЛОГ РЕЗУЛЬТАТУ ---
     if (showResultDialog && workResult != null) {
         MappingCustomDialog(
             title = "Результат відпрацювання",
