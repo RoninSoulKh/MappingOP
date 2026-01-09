@@ -51,7 +51,7 @@
     </summary>
     
     <br>
-    
+
     <img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png" alt="Дорожня карта UA" width="100%">
 
     <br><br>
