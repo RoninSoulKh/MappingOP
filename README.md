@@ -48,9 +48,11 @@
 
 ### Финальный спринт • Январь 2026
 
-![Roadmap UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/assets/roadmap_ua.png)
+![Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
 
-![Final Sprint • January 2026](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/assets/roadmap_en.png)
+![Final Sprint Roadmap • January 2026](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_en.png)
+
+Готовый продукт для реальных бригад — конец января 2026.
 
 ### Установка (для тех, кто в теме)
 
