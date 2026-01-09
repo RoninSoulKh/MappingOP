@@ -46,10 +46,11 @@
 - **RoninSoulKh** (@RoninSoulKh) — всё: архитектура, UI/UX, backend-интеграция, полевое тестирование под обстрелами
 - **EmsFear** — backend API[](https://mappingop.biz.ua)
 
-### Скриншоты (скоро обновлю)
+### Финальный спринт • Январь 2026
 
-<img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/screenshots/profile_dark.jpg" width="300"/> <img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/screenshots/map_clusters.jpg" width="300"/>  
-<img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/screenshots/process_consumer.jpg" width="300"/> <img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/screenshots/export_excel.jpg" width="300"/>
+![Roadmap UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/roadmap_ua.png)
+
+![Final Sprint • January 2026](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/roadmap_en.png)
 
 ### Установка (для тех, кто в теме)
 
