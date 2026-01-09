@@ -49,7 +49,9 @@
     <summary style="cursor: pointer; color: #06B6D4; font-weight: bold; font-size: 1.1em; margin-top: 32px;">
       Просмотреть перевод / View in translate →
     </summary>
-        [Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
+    
+    ![Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
+    
     <p style="margin-top: 24px; color: #94A3B8; font-size: 0.95em;">
       Готовий продукт для реальних бригад — кінець січня 2026<br>
       Battle-ready version for field teams — end of January 2026
