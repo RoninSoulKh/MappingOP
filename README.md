@@ -52,7 +52,7 @@
 
     <div style="margin-top: 32px;"></div>
 
-    ![Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
+    [Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
 
     <p style="margin-top: 24px; color: #94A3B8; font-size: 0.95em;">
       Готовий продукт для реальних бригад — кінець січня 2026<br>
