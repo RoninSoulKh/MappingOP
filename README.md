@@ -41,7 +41,7 @@
 | Геокодирование    | Visicom Data API                    |
 | Безопасность      | ProGuard R8 + FileProvider          |
 
-### Команда (да, один человек)
+### Команда:
 
 - **RoninSoulKh** (@RoninSoulKh) — всё: архитектура, UI/UX, backend-интеграция, полевое тестирование под обстрелами
 - **EmsFear** — backend API[](https://mappingop.biz.ua)
@@ -51,17 +51,18 @@
 ![MappingOP Final Sprint Roadmap](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_en.png)
 
 <div align="center">
-  <p>
-    <strong>
-      <a href="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png" target="_blank" style="color: #06B6D4; text-decoration: none; font-size: 1.2em;">
-        Просмотреть перевод / View in translate →
-      </a>
-    </strong>
-  </p>
-  <p style="font-size: 0.95em; color: #94A3B8; margin-top: 8px;">
-    Готовий продукт для реальних бригад — кінець січня 2026<br>
-    Battle-ready version for field teams — end of January 2026
-  </p>
+  <details>
+    <summary style="cursor: pointer; color: #06B6D4; font-weight: bold; font-size: 1.1em; margin-top: 32px;">
+      Просмотреть перевод / View in translate →
+    </summary>
+    
+    ![Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
+    
+    <p style="margin-top: 24px; color: #94A3B8; font-size: 0.95em;">
+      Готовий продукт для реальних бригад — кінець січня 2026<br>
+      Battle-ready version for field teams — end of January 2026
+    </p>
+  </details>
 </div>
 
 ### Установка (для тех, кто в теме)
