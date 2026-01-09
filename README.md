@@ -50,6 +50,8 @@
       Просмотреть перевод / View in translate →
     </summary>
 
+    <br>
+
     ![Дорожня карта UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png)
 
     <p style="margin-top: 24px; color: #94A3B8; font-size: 0.95em;">
