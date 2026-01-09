@@ -48,9 +48,9 @@
 
 ### Финальный спринт • Январь 2026
 
-![Roadmap UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/roadmap_ua.png)
+![Roadmap UA](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/assets/roadmap_ua.png)
 
-![Final Sprint • January 2026](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/main/roadmap_en.png)
+![Final Sprint • January 2026](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/assets/roadmap_en.png)
 
 ### Установка (для тех, кто в теме)
 
