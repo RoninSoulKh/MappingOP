@@ -44,24 +44,13 @@
 
 ![MappingOP Final Sprint Roadmap](https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_en.png)
 
-<div align="center">
-  <details>
-    <summary style="cursor: pointer; color: #06B6D4; font-weight: bold; font-size: 1.1em;">
-      Просмотреть перевод / View in translate →
-    </summary>
-    
-    <br>
-
-    <img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png" alt="Дорожня карта UA" width="100%">
-
-    <br><br>
-
-    <p style="color: #94A3B8; font-size: 0.95em;">
-      Готовий продукт для реальних бригад — кінець січня 2026<br>
-      Battle-ready version for field teams — end of January 2026
-    </p>
-  </details>
-</div>
+<details>
+  <summary style="cursor: pointer; color: #06B6D4; font-weight: bold; font-size: 1.1em;">
+    Нажми для перевода / Click for translate
+  </summary>
+  <br>
+  <img src="https://raw.githubusercontent.com/RoninSoulKh/MappingOP/master/assets/roadmap_ua.png" alt="Дорожня карта UA" width="100%">
+</details>
 
 ### Установка (для разработчиков)
 
