@@ -2,16 +2,15 @@ package com.roninsoulkh.mappingop.data.database
 
 import android.content.Context
 import androidx.room.*
-import com.roninsoulkh.mappingop.Converters
 import com.roninsoulkh.mappingop.domain.models.*
 import kotlinx.coroutines.flow.Flow
 
 @Database(
     entities = [Worksheet::class, Consumer::class, WorkResult::class],
-    version = 4, // 👈 ВЕРСИЯ ОБНОВЛЕНА ДО 4
+    version = 4,
     exportSchema = false
 )
-@TypeConverters(WorkResultConverters::class, Converters::class)
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun worksheetDao(): WorksheetDao
     abstract fun consumerDao(): ConsumerDao
@@ -75,7 +74,6 @@ interface ConsumerDao {
     @Query("SELECT * FROM consumer WHERE worksheet_id = :worksheetId ORDER BY or_number")
     fun getConsumersByWorksheetId(worksheetId: String): Flow<List<Consumer>>
 
-    // 👇 ВОТ ЭТОТ НОВЫЙ ЗАПРОС ДЛЯ КАРТЫ 👇
     @Query("SELECT * FROM consumer WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
     fun getConsumersWithCoordinates(): Flow<List<Consumer>>
 

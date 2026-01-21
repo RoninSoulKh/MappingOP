@@ -3,14 +3,11 @@ package com.roninsoulkh.mappingop.data.database
 import androidx.room.TypeConverter
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.roninsoulkh.mappingop.domain.models.BuildingCondition
-import com.roninsoulkh.mappingop.domain.models.ConsumerType
-import com.roninsoulkh.mappingop.domain.models.WorkType
+import com.roninsoulkh.mappingop.domain.models.*
 
 class Converters {
 
-    // ============ СПИСОК ФОТО (List<String>) ============
-    // Без этого база не сможет сохранить пути к фото!
+    // --- 1. СПИСОК ФОТО ---
     @TypeConverter
     fun fromStringList(value: List<String>?): String {
         return Gson().toJson(value ?: emptyList<String>())
@@ -27,7 +24,7 @@ class Converters {
         }
     }
 
-    // ============ BuildingCondition ============
+    // --- 2. СТАТУСЫ (ENUMS) ---
     @TypeConverter
     fun fromBuildingCondition(value: BuildingCondition?): String? {
         return value?.name
@@ -40,7 +37,6 @@ class Converters {
         } catch (e: Exception) { null }
     }
 
-    // ============ ConsumerType ============
     @TypeConverter
     fun fromConsumerType(value: ConsumerType?): String? {
         return value?.name
@@ -53,7 +49,6 @@ class Converters {
         } catch (e: Exception) { null }
     }
 
-    // ============ WorkType ============
     @TypeConverter
     fun fromWorkType(value: WorkType?): String? {
         return value?.name

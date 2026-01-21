@@ -1,47 +1,29 @@
-# ==========================================================
-# ФИНАЛЬНАЯ КОНФИГУРАЦИЯ ЗАЩИТЫ КОДА (MAPPING OP v1.0.4)
-# ==========================================================
+# --- MappingOP: Release (R8 Full Mode friendly) ---
 
-# 1. ЗАЩИТА МОДЕЛЕЙ И БАЗЫ ДАННЫХ
--keep class com.roninsoulkh.mappingop.domain.models.** { *; }
--keep class androidx.room.** { *; }
--keep interface androidx.room.** { *; }
--dontwarn androidx.room.paging.**
-
-# 2. ЗАЩИТА БИБЛИОТЕКИ EXCEL (Apache POI & XMLBeans)
--keep class org.apache.poi.** { *; }
--keep class org.apache.xmlbeans.** { *; }
--keep class org.openxmlformats.** { *; }
--keep class javax.xml.** { *; }
-
-# 3. ЗАЩИТА ВСПОМОГАТЕЛЬНЫХ БИБЛИОТЕК (Фикс IOUtils и Логгера)
--keep class org.apache.commons.** { *; }
--dontwarn org.apache.commons.**
-# ВАЖНО: Защищаем NullLogger, который мы включим в коде
--keep class org.apache.poi.util.NullLogger { *; }
-
-# 4. ЗАЩИТА ЖИЗНЕННОГО ЦИКЛА COMPOSE
+# Gson needs generic signatures + annotations (иначе ловишь LinkedTreeMap/ClassCast)
+-keepattributes Signature
 -keepattributes *Annotation*
--keepclassmembers class * {
-    @androidx.compose.runtime.Composable *;
+-keepattributes InnerClasses,EnclosingMethod
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
+
+# Keep TypeToken (для List<T>, Map<K,V> и т.п.)
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+
+# Не удаляй поля, которые помечены @SerializedName
+-keepclassmembers,allowobfuscation class * {
+  @com.google.gson.annotations.SerializedName <fields>;
 }
 
-# 5. ПОДАВЛЕНИЕ ПРЕДУПРЕЖДЕНИЙ
+# На всякий случай: не выкидывай модели домена (они маленькие, зато стабильно)
+-keep,allowobfuscation class com.roninsoulkh.mappingop.domain.models.** { *; }
+
+# Ворнинги по тяжелым либам
 -dontwarn org.apache.poi.**
 -dontwarn org.apache.xmlbeans.**
 -dontwarn org.openxmlformats.**
--dontwarn schemasMicrosoftCom.**
--dontwarn org.etsi.uri.**
--dontwarn org.w3c.dom.**
--dontwarn org.xml.sax.**
 -dontwarn javax.xml.**
 -dontwarn java.awt.**
--dontwarn javax.accessibility.**
--dontwarn com.graphbuilder.**
--dontwarn com.github.javaparser.**
 -dontwarn org.apache.logging.log4j.**
--dontwarn aQute.bnd.annotation.**
--dontwarn com.sun.org.apache.**
-
-# Сохраняем информацию для отчетов об ошибках
--keepattributes SourceFile,LineNumberTable
+-dontwarn org.apache.commons.**
+-dontwarn org.osmdroid.**
