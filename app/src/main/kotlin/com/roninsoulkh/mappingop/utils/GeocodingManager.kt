@@ -1,5 +1,6 @@
 package com.roninsoulkh.mappingop.utils
 
+import android.location.Location
 import android.util.Log
 import com.roninsoulkh.mappingop.BuildConfig
 import com.roninsoulkh.mappingop.domain.models.Consumer
@@ -15,15 +16,10 @@ import java.util.concurrent.TimeUnit
 object GeocodingManager {
     private val API_KEY = BuildConfig.VISICOM_KEY
 
-    private const val CURRENT_REGION_ID = "UA-63"
-
-    private val BIG_SETTLEMENTS = listOf(
-        "харків", "лозова", "ізюм", "чугуїв", "первомайський", "балаклія", "куп'янськ",
-        "мерефа", "люботин", "красноград", "вовчанськ", "дергачі", "богодухів", "зміїв", "валки", "барвінкове",
-        "пісочин", "солоницівка", "високий", "безлюдівка", "мала данилівка",
-        "циркуни", "липці", "руські тишки", "черкаські тишки", "слобожанське",
-        "ківшарівка", "покотилівка", "рогань"
-    )
+    // Если "Дом" больше 150 метров по диагонали — это вранье, это улица или квартал.
+    private const val MAX_HOUSE_DIAGONAL = 150
+    // Если "Улица" или "Село" больше 4 км — это слишком неточно.
+    private const val MAX_SETTLEMENT_DIAGONAL = 4000
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -34,7 +30,15 @@ object GeocodingManager {
         val lat: Double,
         val lon: Double,
         val type: String,
-        val found: Boolean
+        val found: Boolean,
+        val isApproximate: Boolean = false
+    )
+
+    private data class VisicomFeature(
+        val lat: Double,
+        val lon: Double,
+        val category: String,
+        val bboxDiagonal: Float
     )
 
     suspend fun geocodingBatch(
@@ -47,13 +51,14 @@ object GeocodingManager {
             consumers.forEachIndexed { index, consumer ->
                 withContext(Dispatchers.Main) { onProgress(index + 1, consumers.size) }
 
-                if (consumer.latitude != null) {
-                    return@forEachIndexed
-                }
+                if (consumer.latitude != null && consumer.latitude != 0.0) return@forEachIndexed
 
-                delay(800) // Анти-бан
+                delay(800)
 
-                val result = smartGeocode(consumer.rawAddress)
+                // Определяем название области текстом (Харківська область)
+                val regionName = getRegionName(consumer.rawAddress)
+
+                val result = smartGeocode(consumer.rawAddress, regionName)
                 results[consumer.id] = result
             }
             results
@@ -61,66 +66,86 @@ object GeocodingManager {
     }
 
     suspend fun testGeocode(rawAddress: String): GeocodingResult {
-        return smartGeocode(rawAddress)
+        return smartGeocode(rawAddress, getRegionName(rawAddress))
     }
 
-    private suspend fun smartGeocode(rawAddress: String): GeocodingResult {
+    private suspend fun smartGeocode(rawAddress: String, regionName: String): GeocodingResult {
         return withContext(Dispatchers.IO) {
             try {
                 val comp = parseAddressToCleanParts(rawAddress)
-                val settlement = if (comp.settlement.isNotEmpty()) comp.settlement else "Циркуни"
+                val settlement = if (comp.settlement.isNotEmpty()) comp.settlement else ""
 
-                // 1. Поиск точного адреса (Улица + Дом)
+                // Собираем строку базы: "62322 Безруки Харківська область"
+                // Добавляем regionName в конец запроса — это ЖЕЛЕЗНО работает.
+                val baseLocation = listOfNotNull(comp.zipCode, settlement, regionName)
+                    .filter { it.isNotEmpty() }
+                    .joinToString(" ")
+
+                // --- 1. ТОЧНЫЙ АДРЕС ---
                 if (comp.street.isNotEmpty() && comp.house.isNotEmpty()) {
-                    val query = "$settlement, ${comp.street} ${comp.house}"
-                    val res = executeRequest(query, "adr_address", settlement)
-                    if (res != null) return@withContext GeocodingResult(res.first, res.second, "house", true)
+                    val query = "$baseLocation ${comp.street} ${comp.house}".trim()
+                    val feat = executeRequest(query, "adr_address")
+
+                    if (feat != null) {
+                        if (feat.category == "adr_address") {
+                            // ФИКС СИНИХ КЛАСТЕРОВ:
+                            // Если Visicom говорит "Это дом", но его размер > 150м — это не точный дом.
+                            if (feat.bboxDiagonal > MAX_HOUSE_DIAGONAL) {
+                                return@withContext GeocodingResult(feat.lat, feat.lon, "street", true, isApproximate = true)
+                            }
+                            return@withContext GeocodingResult(feat.lat, feat.lon, "house", true)
+                        } else if (feat.category == "adr_street") {
+                            // Искали дом, нашли улицу -> Оранжевый
+                            return@withContext GeocodingResult(feat.lat, feat.lon, "street", true, isApproximate = true)
+                        }
+                    }
                 }
 
-                // 2. Поиск улицы
+                // --- 2. УЛИЦА ---
                 if (comp.street.isNotEmpty()) {
-                    val query = "$settlement, ${comp.street}"
-                    val res = executeRequest(query, "adr_street", settlement)
-                    if (res != null) return@withContext GeocodingResult(res.first, res.second, "street", true)
+                    val query = "$baseLocation ${comp.street}".trim()
+                    val feat = executeRequest(query, "adr_street")
+
+                    if (feat != null) {
+                        if (feat.bboxDiagonal > MAX_SETTLEMENT_DIAGONAL) {
+                            Log.w("GEO", "Улица '${comp.street}' слишком длинная.")
+                            return@withContext GeocodingResult(0.0, 0.0, "street_too_big", false)
+                        }
+                        return@withContext GeocodingResult(feat.lat, feat.lon, "street", true, isApproximate = true)
+                    }
                 }
 
-                // 3. Поиск населенного пункта
-                val isBig = BIG_SETTLEMENTS.any { settlement.lowercase().contains(it) }
-                if (isBig) {
-                    Log.w("GEO_SKIP", "Большое село ($settlement), точный адрес не найден.")
-                    return@withContext GeocodingResult(0.0, 0.0, "not_found_in_big_city", false)
-                } else {
-                    val query = settlement
-                    val res = executeRequest(query, "adm_settlement", settlement)
-                    if (res != null) {
-                        return@withContext GeocodingResult(res.first, res.second, "settlement_center", true)
+                // --- 3. НАСЕЛЕННЫЙ ПУНКТ ---
+                if (baseLocation.isNotEmpty()) {
+                    val feat = executeRequest(baseLocation, "adm_settlement")
+                    if (feat != null) {
+                        if (feat.bboxDiagonal > MAX_SETTLEMENT_DIAGONAL) {
+                            Log.w("GEO", "НП '$settlement' слишком большой.")
+                            return@withContext GeocodingResult(0.0, 0.0, "city_too_big", false)
+                        }
+                        return@withContext GeocodingResult(feat.lat, feat.lon, "settlement_center", true, isApproximate = true)
                     }
                 }
 
                 GeocodingResult(0.0, 0.0, "none", false)
 
             } catch (e: Exception) {
-                Log.e("GEO_CRASH", "Ошибка: ${e.message}")
                 GeocodingResult(0.0, 0.0, "error", false)
             }
         }
     }
 
-    private fun executeRequest(queryText: String, category: String, expectedSettlement: String): Pair<Double, Double>? {
+    private fun executeRequest(queryText: String, category: String): VisicomFeature? {
         try {
             val urlBuilder = HttpUrl.Builder()
                 .scheme("https")
                 .host("api.visicom.ua")
                 .addPathSegments("data-api/5.0/uk/geocode.json")
-                .addQueryParameter("text", queryText)
+                .addQueryParameter("text", queryText) // Теперь здесь "Безруки Харківська область"
                 .addQueryParameter("key", API_KEY)
                 .addQueryParameter("limit", "1")
                 .addQueryParameter("categories", category)
-
-            // === ФИЛЬТР ПО ОБЛАСТИ ===
-            if (CURRENT_REGION_ID.isNotEmpty()) {
-                urlBuilder.addQueryParameter("intersect_with", CURRENT_REGION_ID)
-            }
+            // intersect_with УБРАЛИ, он не работает надежно с ISO кодами
 
             val request = Request.Builder().url(urlBuilder.build()).header("User-Agent", "MappingOP/1.0").build()
             val response = client.newCall(request).execute()
@@ -139,36 +164,35 @@ object GeocodingManager {
             }
 
             if (feature != null) {
-                if (!validateResult(feature, expectedSettlement)) return null
                 val coords = feature.getJSONObject("geo_centroid").getJSONArray("coordinates")
-                return Pair(coords.getDouble(1), coords.getDouble(0))
+                val props = feature.optJSONObject("properties")
+                val foundCategory = props?.optString("categories") ?: category
+
+                var diagonal = 0f
+                val bbox = feature.optJSONArray("geo_bbox")
+                if (bbox != null && bbox.length() == 4) {
+                    val res = FloatArray(1)
+                    Location.distanceBetween(
+                        bbox.getDouble(1), bbox.getDouble(0),
+                        bbox.getDouble(3), bbox.getDouble(2), res
+                    )
+                    diagonal = res[0]
+                }
+
+                return VisicomFeature(
+                    lat = coords.getDouble(1),
+                    lon = coords.getDouble(0),
+                    category = foundCategory,
+                    bboxDiagonal = diagonal
+                )
             }
         } catch (e: Exception) {
-            Log.e("GEO_NET", "Сбой: ${e.message}")
+            Log.e("GEO_NET", "Fail: ${e.message}")
         }
         return null
     }
 
-    private fun validateResult(feature: JSONObject, expectedSettlement: String): Boolean {
-        val props = feature.optJSONObject("properties") ?: return false
-
-        // Доп. проверка, если Visicom вернет что-то странное
-        val level1 = props.optString("level1").lowercase()
-        // Если мы ищем в Харькове, а вернуло не Харьков - отбой (хотя intersect_with должен это решить)
-        if (CURRENT_REGION_ID == "UA-63" && level1.isNotEmpty() && !level1.contains("харків")) return false
-
-        val foundSettlement = props.optString("settlement").lowercase()
-        val searchSettlement = expectedSettlement.lowercase()
-
-        if (foundSettlement.isNotEmpty() &&
-            !searchSettlement.contains(foundSettlement) &&
-            !foundSettlement.contains(searchSettlement)) {
-            return false
-        }
-        return true
-    }
-
-    private data class CleanAddress(val settlement: String, val street: String, val house: String)
+    private data class CleanAddress(val settlement: String, val street: String, val house: String, val zipCode: String)
 
     private fun parseAddressToCleanParts(raw: String): CleanAddress {
         val cleanRaw = raw.replace("\"", "").trim()
@@ -177,33 +201,39 @@ object GeocodingManager {
         var settlement = ""
         var street = ""
         var house = ""
+        var zipCode = ""
 
         parts.forEach { part ->
             val lower = part.lowercase()
-            if (part.matches(Regex("\\d{5}"))) return@forEach
-            if (lower.contains("обл") || lower.contains("р-н") || lower.contains("район")) return@forEach
+            if (part.matches(Regex("\\d{5}"))) { zipCode = part; return@forEach }
+            if (lower.contains("обл") || lower.contains("р-н")) return@forEach
 
-            if (lower.startsWith("с.") || lower.startsWith("м.") || lower.startsWith("смт") || lower.startsWith("сел.") || lower.contains("селище")) {
-                settlement = part
-                    .replace("с.", "")
-                    .replace("м.", "")
-                    .replace("смт", "")
-                    .replace("сел.", "")
-                    .replace("селище", "")
-                    .trim()
-            } else if (settlement.isEmpty() && (lower == "циркуни" || lower == "липці" || lower == "кравцівка" || lower == "станіславівка")) {
-                settlement = part
-            } else if (lower.contains("вул") || lower.contains("пров") || lower.contains("просп") || lower.contains("майдан") || lower.contains("в'їзд")) {
-                street = part
-                    .replace("вул.", "").replace("вул", "")
-                    .replace("пров.", "").replace("просп.", "")
-                    .trim()
+            if (lower.startsWith("с.") || lower.startsWith("м.") || lower.startsWith("смт")) {
+                settlement = part.replace(Regex("^(с\\.|м\\.|смт\\.|сел\\.|селище)\\s*"), "").trim()
+            } else if (lower.contains("вул") || lower.contains("пров") || lower.contains("просп")) {
+                street = part.replace(Regex("^(вул\\.|вул|пров\\.|пров|просп\\.|просп)\\s*"), "").trim()
             } else if (part.any { it.isDigit() } && !lower.contains("кв")) {
-                house = part.replace("буд.", "").replace("буд", "").trim()
+                house = part.replace(Regex("^(буд\\.|буд)\\s*"), "").trim()
             }
         }
-        if (settlement.isEmpty() && cleanRaw.lowercase().contains("циркун")) settlement = "Циркуни"
 
-        return CleanAddress(settlement, street, house)
+        return CleanAddress(settlement, street, house, zipCode)
+    }
+
+    // Возвращает ПОЛНОЕ название области для уточнения поиска
+    private fun getRegionName(rawAddress: String): String {
+        val lower = rawAddress.lowercase().replace('i', 'і').replace('y', 'у')
+        return when {
+            lower.contains("харків") -> "Харківська область"
+            lower.contains("київ") -> "Київська область"
+            lower.contains("полтав") -> "Полтавська область"
+            lower.contains("сумськ") -> "Сумська область"
+            lower.contains("дніпр") -> "Дніпропетровська область"
+            lower.contains("донецьк") -> "Донецька область"
+            lower.contains("львів") -> "Львівська область"
+            lower.contains("одес") -> "Одеська область"
+            lower.contains("запоріж") -> "Запорізька область"
+            else -> ""
+        }
     }
 }

@@ -34,7 +34,9 @@ class Converters {
     fun toBuildingCondition(value: String?): BuildingCondition? {
         return if (value == null) null else try {
             BuildingCondition.valueOf(value)
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     @TypeConverter
@@ -46,7 +48,9 @@ class Converters {
     fun toConsumerType(value: String?): ConsumerType? {
         return if (value == null) null else try {
             ConsumerType.valueOf(value)
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     @TypeConverter
@@ -58,6 +62,37 @@ class Converters {
     fun toWorkType(value: String?): WorkType? {
         return if (value == null) null else try {
             WorkType.valueOf(value)
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // --- 3. ГЕОКОДИНГ (НОВОЕ) ---
+    @TypeConverter
+    fun fromGeoPrecision(value: GeoPrecision?): String? {
+        return value?.name
+    }
+
+    @TypeConverter
+    fun toGeoPrecision(value: String?): GeoPrecision? {
+        return if (value == null) null else try {
+            GeoPrecision.valueOf(value)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    @TypeConverter
+    fun fromGeoSource(value: GeoSource?): String? {
+        return value?.name
+    }
+
+    @TypeConverter
+    fun toGeoSource(value: String?): GeoSource? {
+        return if (value == null) null else try {
+            GeoSource.valueOf(value)
+        } catch (e: Exception) {
+            null
+        }
     }
 }

@@ -46,6 +46,10 @@ import com.roninsoulkh.mappingop.data.parser.ExcelParser
 import com.roninsoulkh.mappingop.domain.models.Consumer
 import com.roninsoulkh.mappingop.domain.models.WorkResult
 import com.roninsoulkh.mappingop.domain.models.Worksheet
+// 🔥 ДОБАВЛЕНЫ ИМПОРТЫ ДЛЯ РУЧНОЙ ПРИВЯЗКИ
+import com.roninsoulkh.mappingop.domain.models.GeoPrecision
+import com.roninsoulkh.mappingop.domain.models.GeoSource
+
 import com.roninsoulkh.mappingop.ui.screens.*
 import com.roninsoulkh.mappingop.ui.theme.MappingOPTheme
 import com.roninsoulkh.mappingop.data.repository.AppRepository
@@ -361,27 +365,86 @@ fun MainScreen(
         LaunchedEffect(Unit) { filePickerLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }
     }
 
+    // ✅ ДІАЛОГ "НЕ ЗНАЙДЕНО" (формат: ОР жирним / адреса / ПІБ КАПСОМ)
+    // ВАЖЛИВО: failedList тут містить List<Consumer>, тому не можна друкувати "$consumer" — інакше буде Consumer(...).
     if (failedList.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { geoService.clearErrors() },
-            title = { Text("Звіт пошуку") },
-            text = {
+            containerColor = Color(0xFF1E293B),
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
+            title = {
                 Column {
-                    Text("Не знайдено адрес: ${failedList.size}")
+                    Text("Звіт пошуку", fontWeight = FontWeight.Bold, color = Color.White)
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyColumn(modifier = Modifier.height(200.dp)) {
-                        items(failedList) { addr ->
-                            Text("- $addr", fontSize = 12.sp)
-                            Divider()
+                    Text(
+                        "Не знайдено адрес: ${failedList.size}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.height(350.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(failedList) { consumer ->
+                        Surface(
+                            color = Color(0xFF334155),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // логіка навігації як і раніше — просто відкриваємо ConsumerDetail
+                                    geoService.clearErrors()
+                                    selectedConsumer = consumer
+                                    currentTab = BottomTab.TASKS
+                                    isNavigatedFromMap = false
+                                    currentWorksheetsScreen = AppScreen.ConsumerDetail
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                // 1) ОР (жирним)
+                                Text(
+                                    text = consumer.orNumber,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // 2) Адреса (звичайним)
+                                Text(
+                                    text = consumer.rawAddress,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFCBD5E1),
+                                    lineHeight = 16.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // 3) ПІБ (капсом)
+                                Text(
+                                    text = consumer.name.uppercase(),
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF94A3B8),
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { geoService.clearErrors() }) { Text("OK") }
+                TextButton(onClick = { geoService.clearErrors() }) {
+                    Text("OK", color = CyanAction, fontWeight = FontWeight.Bold)
+                }
             }
         )
     }
+
 
     Scaffold(
         floatingActionButtonPosition = FabPosition.Start,
@@ -557,6 +620,14 @@ fun MainScreen(
                                 currentTab = BottomTab.TASKS
                                 currentWorksheetsScreen = AppScreen.ConsumerDetail
                             },
+                            // 🔥 НОВОЕ: Обработка ручной привязки с карты
+                            onManualLocationClick = { consumer ->
+                                selectedConsumer = consumer
+                                isNavigatedFromMap = true
+                                currentTab = BottomTab.TASKS
+                                // Открываем экран редактирования
+                                currentWorksheetsScreen = AppScreen.EditLocation(consumer)
+                            },
                             isGeocoding = isGeocoding,
                             progress = geoProgress
                         )
@@ -637,9 +708,16 @@ fun MainScreen(
                                 is AppScreen.EditLocation -> EditLocationScreen(
                                     consumer = targetScreen.consumer,
                                     onSave = { lat, lng ->
-                                        val c = targetScreen.consumer
-                                        c.latitude = lat
-                                        c.longitude = lng
+                                        // 🔥 ОБНОВЛЕННАЯ ЛОГИКА СОХРАНЕНИЯ (Step 3)
+                                        val c = targetScreen.consumer.copy(
+                                            latitude = lat,
+                                            longitude = lng,
+                                            geoSource = GeoSource.FIELD_CONFIRMED, // Подтверждено вручную
+                                            geoPrecision = GeoPrecision.HOUSE,     // Точно дом
+                                            geoSourceCategory = "FIELD_CONFIRMED",
+                                            needsManualPin = false,                // Больше не просим уточнять
+                                            geoMessage = "Підтверджено вручну (польова перевірка)"
+                                        )
                                         coroutineScope.launch {
                                             repository.updateConsumer(c)
                                             onShowNotification("Координати збережено вручну", false)

@@ -48,7 +48,6 @@ fun WorksheetsScreen(
                 )
             )
         }
-        // 🔥 ПЛЮСИК ВИДАЛЕНО (FAB removed)
     ) { padding ->
         Column(
             modifier = Modifier
@@ -80,13 +79,11 @@ fun WorksheetsScreen(
             }
         }
 
-        // 🔥 КРАСИВЕ МЕНЮ ДІЙ (Custom Dialog)
         if (showMenuForWorksheet != null) {
             MappingCustomDialog(
                 title = "Дії з файлом",
                 onDismiss = { showMenuForWorksheet = null }
             ) {
-                // Кнопка Перейменувати
                 OutlinedButton(
                     onClick = {
                         showRenameDialog = showMenuForWorksheet
@@ -100,7 +97,6 @@ fun WorksheetsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Кнопка Видалити
                 Button(
                     onClick = {
                         onDeleteWorksheet(showMenuForWorksheet!!)
@@ -121,7 +117,6 @@ fun WorksheetsScreen(
             }
         }
 
-        // 🔥 КРАСИВИЙ ДІАЛОГ ПЕРЕЙМЕНУВАННЯ
         if (showRenameDialog != null) {
             RenameDialogInternal(
                 initialName = showRenameDialog!!.fileName,

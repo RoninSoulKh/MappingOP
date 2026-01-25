@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Database(
     entities = [Worksheet::class, Consumer::class, WorkResult::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

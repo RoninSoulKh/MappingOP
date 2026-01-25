@@ -80,10 +80,39 @@ data class Consumer(
     val photos: List<String> = emptyList(),
 
     @SerializedName("latitude")
+    @ColumnInfo(name = "latitude")
     var latitude: Double? = null,
 
     @SerializedName("longitude")
-    var longitude: Double? = null
+    @ColumnInfo(name = "longitude")
+    var longitude: Double? = null,
+
+    // ====== Геокодинг: честная точность и пояснение ======
+
+    @ColumnInfo(name = "geo_precision")
+    val geoPrecision: GeoPrecision = GeoPrecision.UNKNOWN,
+
+    @ColumnInfo(name = "geo_source")
+    val geoSource: GeoSource = GeoSource.NONE,
+
+    /**
+     * Категория из Visicom: adr_address / adr_street / adm_settlement
+     * или "FIELD_CONFIRMED", если вручную.
+     */
+    @ColumnInfo(name = "geo_source_category")
+    val geoSourceCategory: String? = null,
+
+    /**
+     * Сообщение для UI: например “немає нумерації будинків у базі”.
+     */
+    @ColumnInfo(name = "geo_message")
+    val geoMessage: String? = null,
+
+    /**
+     * Если true — UI должен предложить “Прив’язати вручну на карті”.
+     */
+    @ColumnInfo(name = "needs_manual_pin")
+    val needsManualPin: Boolean = false
 ) {
     val shortAddress: String
         get() = rawAddress.takeIf { it.length <= 30 } ?: "${rawAddress.take(27)}..."

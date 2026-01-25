@@ -2,6 +2,8 @@ package com.roninsoulkh.mappingop.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,6 +50,24 @@ fun ConsumerDetailScreen(
     var showResultDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // Функція запуску навігатора (Google Maps / Waze)
+    fun openNavigation() {
+        if (consumer.latitude != null && consumer.longitude != null && consumer.latitude != 0.0) {
+            try {
+                // geo:lat,lon?q=lat,lon(Label) - стандартний формат для карт
+                val label = Uri.encode("${consumer.rawAddress} (${consumer.orNumber})")
+                val uri = Uri.parse("geo:${consumer.latitude},${consumer.longitude}?q=${consumer.latitude},${consumer.longitude}($label)")
+                val mapIntent = Intent(Intent.ACTION_VIEW, uri)
+                // Ця команда змусить Android показати меню вибору: Maps, Waze тощо
+                context.startActivity(mapIntent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Немає додатку для карт", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "Координати відсутні", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -64,6 +84,16 @@ fun ConsumerDetailScreen(
                     }
                 },
                 actions = {
+                    // Кнопка навігації в шапці (дублююча, для зручності)
+                    if (consumer.latitude != null && consumer.latitude != 0.0) {
+                        IconButton(onClick = { openNavigation() }) {
+                            Icon(
+                                imageVector = Icons.Filled.DirectionsCar,
+                                contentDescription = "Маршрут",
+                                tint = CyanAction
+                            )
+                        }
+                    }
                     IconButton(onClick = onMapClick) {
                         Icon(
                             imageVector = Icons.Filled.Place,
@@ -257,7 +287,38 @@ fun ConsumerDetailScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 🔥 КНОПКА НАВІГАЦІЇ (Основна дія)
+                Button(
+                    onClick = { openNavigation() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CyanAction,
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(4.dp),
+                    enabled = (consumer.latitude != null && consumer.latitude != 0.0)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.DirectionsCar,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "ПОБУДУВАТИ МАРШРУТ",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Кнопка редагування (Другорядна дія)
                 OutlinedButton(
                     onClick = onManualLocationClick,
                     modifier = Modifier
@@ -275,12 +336,12 @@ fun ConsumerDetailScreen(
                     Icon(
                         imageVector = Icons.Filled.EditLocation,
                         contentDescription = null,
-                        tint = CyanAction,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Змінити координати вручну",
+                        text = "Коригувати координати",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

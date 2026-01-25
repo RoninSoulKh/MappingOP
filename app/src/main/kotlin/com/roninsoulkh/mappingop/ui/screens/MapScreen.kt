@@ -2,12 +2,15 @@ package com.roninsoulkh.mappingop.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -23,7 +26,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -34,24 +36,28 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.roninsoulkh.mappingop.R
 import com.roninsoulkh.mappingop.domain.models.Consumer
+import com.roninsoulkh.mappingop.domain.models.GeoPrecision
+import com.roninsoulkh.mappingop.domain.models.GeoSource
 import com.roninsoulkh.mappingop.domain.models.Worksheet
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import kotlin.math.abs
+import java.util.Locale
 
-// --- DNA COLORS ---
 private val CardColor = Color(0xFF1E293B)
 private val CyanAction = Color(0xFF06B6D4)
 private val TextWhite = Color(0xFFF8FAFC)
 private val TextSlate = Color(0xFF94A3B8)
 private val ErrorRed = Color(0xFFEF4444)
+private val WarningOrange = Color(0xFFF59E0B)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,16 +66,14 @@ fun MapScreen(
     consumers: List<Consumer>,
     totalCount: Int,
     foundCount: Int,
-
-    // === ПАРАМЕТРЫ КАМЕРЫ ===
     initialCenter: GeoPoint,
     initialZoom: Double,
     cameraTarget: GeoPoint? = null,
     onCameraTargetSettled: () -> Unit = {},
     onMapStateChanged: (GeoPoint, Double) -> Unit = { _, _ -> },
-
     onWorksheetSelected: (Worksheet) -> Unit,
     onConsumerClick: (Consumer) -> Unit,
+    onManualLocationClick: (Consumer) -> Unit,
     isGeocoding: Boolean,
     progress: Pair<Int, Int>?
 ) {
@@ -78,15 +82,42 @@ fun MapScreen(
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Ссылка на карту и зум
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var currentZoomLevel by remember { mutableStateOf(initialZoom) }
+    var currentBoundingBox by remember { mutableStateOf<BoundingBox?>(null) }
 
-    // Состояния диалогов
     var clusterDialogList by remember { mutableStateOf<List<Consumer>?>(null) }
     var showNotFoundDialog by remember { mutableStateOf(false) }
 
-    // === ЛОГИКА КАМЕРЫ ===
+    var approxConsumerDialog by remember { mutableStateOf<Consumer?>(null) }
+
+    // Допоміжна функція навігації
+    fun openNavigation(consumer: Consumer) {
+        if (consumer.latitude != null && consumer.longitude != null && consumer.latitude != 0.0) {
+            try {
+                val label = Uri.encode("${consumer.rawAddress} (${consumer.orNumber})")
+                val uri = Uri.parse("geo:${consumer.latitude},${consumer.longitude}?q=${consumer.latitude},${consumer.longitude}($label)")
+                val mapIntent = Intent(Intent.ACTION_VIEW, uri)
+                context.startActivity(mapIntent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Немає додатку для карт", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun isValidCoord(lat: Double?, lon: Double?): Boolean {
+        if (lat == null || lon == null) return false
+        if (lat == 0.0 && lon == 0.0) return false
+        if (lat < -90.0 || lat > 90.0) return false
+        if (lon < -180.0 || lon > 180.0) return false
+        return true
+    }
+
+    fun isAccurate(consumer: Consumer): Boolean {
+        return consumer.geoPrecision == GeoPrecision.HOUSE ||
+                consumer.geoSource == GeoSource.FIELD_CONFIRMED
+    }
+
     LaunchedEffect(cameraTarget) {
         if (cameraTarget != null && mapViewRef != null) {
             mapViewRef?.controller?.animateTo(cameraTarget, 18.0, 1500L)
@@ -95,7 +126,7 @@ fun MapScreen(
     }
 
     LaunchedEffect(consumers) {
-        val validConsumers = consumers.filter { it.latitude != null && it.latitude != 0.0 }
+        val validConsumers = consumers.filter { isValidCoord(it.latitude, it.longitude) }
         if (validConsumers.isNotEmpty() && mapViewRef != null && cameraTarget == null) {
             val avgLat = validConsumers.map { it.latitude!! }.average()
             val avgLon = validConsumers.map { it.longitude!! }.average()
@@ -103,17 +134,33 @@ fun MapScreen(
         }
     }
 
-    // === КЛАСТЕРИЗАЦИЯ ===
-    val visibleMarkers = remember(consumers, currentZoomLevel, searchQuery) {
-        val filtered = if (searchQuery.isEmpty()) {
-            consumers.filter { it.latitude != null && it.latitude != 0.0 }
-        } else {
-            consumers.filter {
-                (it.latitude != null && it.latitude != 0.0) &&
-                        (it.rawAddress.contains(searchQuery, true) ||
-                                it.name.contains(searchQuery, true) ||
-                                it.orNumber.contains(searchQuery, true))
+    val visibleMarkers = remember(consumers, currentZoomLevel, searchQuery, currentBoundingBox) {
+        fun isInsideBox(lat: Double, lon: Double, box: BoundingBox): Boolean {
+            val latPad = (box.latNorth - box.latSouth) * 0.10
+            val lonPad = (box.lonEast - box.lonWest) * 0.10
+            val north = box.latNorth + latPad
+            val south = box.latSouth - latPad
+            val east = box.lonEast + lonPad
+            val west = box.lonWest - lonPad
+            return lat in south..north && lon in west..east
+        }
+
+        val baseFiltered = consumers
+            .asSequence()
+            .filter { isValidCoord(it.latitude, it.longitude) }
+            .filter {
+                searchQuery.isEmpty() ||
+                        it.rawAddress.contains(searchQuery, true) ||
+                        it.name.contains(searchQuery, true) ||
+                        it.orNumber.contains(searchQuery, true)
             }
+            .toList()
+
+        val box = currentBoundingBox
+        val filtered = if (box == null) {
+            baseFiltered
+        } else {
+            baseFiltered.filter { c -> isInsideBox(c.latitude!!, c.longitude!!, box) }
         }
 
         val gridDistance = when {
@@ -122,6 +169,7 @@ fun MapScreen(
             currentZoomLevel >= 14.0 -> 0.005
             else -> 0.03
         }
+
         groupConsumersByDistance(filtered, gridDistance)
     }
 
@@ -136,7 +184,6 @@ fun MapScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // 1. КАРТА (OSM)
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -152,14 +199,18 @@ fun MapScreen(
                     controller.setCenter(initialCenter)
 
                     mapViewRef = this
+                    currentBoundingBox = this.boundingBox
 
                     addMapListener(object : MapListener {
                         override fun onScroll(event: ScrollEvent?): Boolean {
+                            currentBoundingBox = this@apply.boundingBox
                             onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
                             return false
                         }
+
                         override fun onZoom(event: ZoomEvent?): Boolean {
                             currentZoomLevel = this@apply.zoomLevelDouble
+                            currentBoundingBox = this@apply.boundingBox
                             onMapStateChanged(mapCenter as GeoPoint, zoomLevelDouble)
                             return true
                         }
@@ -172,7 +223,12 @@ fun MapScreen(
 
                 if (myLocationOverlay != null) {
                     mapView.overlays.add(myLocationOverlay)
-                } else if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                } else if (
+                    ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
                     enableMyLocation(mapView, context)
                 }
 
@@ -181,9 +237,12 @@ fun MapScreen(
                     marker.position = GeoPoint(group.lat, group.lon)
                     marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
 
+                    val hasApproximate = group.consumers.any { !isAccurate(it) }
+
                     if (group.consumers.size > 1) {
-                        marker.icon = createBlueClusterIcon(context, group.consumers.size)
-                        marker.title = "Об'єктів: ${group.consumers.size}"
+                        marker.icon = createClusterIcon(context, group.consumers.size, hasApproximate)
+                        marker.title = if (hasApproximate) "~${group.consumers.size}" else "${group.consumers.size}"
+
                         marker.setOnMarkerClickListener { _, map ->
                             if (map != null && map.zoomLevelDouble < 17.5) {
                                 map.controller.animateTo(marker.position, map.zoomLevelDouble + 2.0, 1000L)
@@ -194,14 +253,22 @@ fun MapScreen(
                         }
                     } else {
                         val consumer = group.consumers.first()
+                        val accurate = isAccurate(consumer)
+
                         val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
-                        val iconDrawable = ContextCompat.getDrawable(context, iconRes)
-                        if (iconDrawable != null) marker.icon = iconDrawable
+                        ContextCompat.getDrawable(context, iconRes)?.let {
+                            marker.icon = it
+                        }
 
                         marker.title = consumer.rawAddress
                         marker.subDescription = "ОР: ${consumer.orNumber}"
+
                         marker.setOnMarkerClickListener { _, _ ->
-                            onConsumerClick(consumer)
+                            if (accurate) {
+                                onConsumerClick(consumer)
+                            } else {
+                                approxConsumerDialog = consumer
+                            }
                             true
                         }
                     }
@@ -211,12 +278,12 @@ fun MapScreen(
             }
         )
 
-        // 2. ПЛАВАЮЩИЙ ПОИСК (ВЕРХ)
+        // UI Controls ...
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .statusBarsPadding() // 🔥 ИСПРАВЛЕНИЕ 1: Отступ от статус-бара
+                .statusBarsPadding()
                 .padding(top = 8.dp, start = 16.dp, end = 16.dp)
         ) {
             Surface(
@@ -309,7 +376,6 @@ fun MapScreen(
             }
         }
 
-        // 3. ПАНЕЛЬ УПРАВЛЕНИЯ (НИЗ-ПРАВО)
         MapControlsColumn(
             onZoomIn = { mapViewRef?.controller?.zoomIn() },
             onZoomOut = { mapViewRef?.controller?.zoomOut() },
@@ -322,10 +388,12 @@ fun MapScreen(
                         }
                     }
                 } else {
-                    locationPermissionLauncher.launch(arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    ))
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
                 }
             },
             modifier = Modifier
@@ -333,7 +401,6 @@ fun MapScreen(
                 .padding(bottom = 32.dp, end = 16.dp)
         )
 
-        // 4. ПРОГРЕСС ГЕОКОДИНГА
         if (isGeocoding) {
             Surface(
                 modifier = Modifier.align(Alignment.Center).wrapContentSize(),
@@ -358,35 +425,55 @@ fun MapScreen(
             }
         }
 
-        // 5. ДИАЛОГИ КЛАСТЕРА
+        // --- ДІАЛОГ КЛАСТЕРІВ (з кнопкою навігації) ---
         if (clusterDialogList != null) {
             AlertDialog(
                 onDismissRequest = { clusterDialogList = null },
                 containerColor = CardColor,
                 titleContentColor = TextWhite,
                 textContentColor = TextWhite,
-                title = { Text("За цією локацією (${clusterDialogList!!.size}):") },
+                title = { Text("У цій точці (${clusterDialogList!!.size}):") },
                 text = {
                     val safeList = clusterDialogList ?: emptyList()
                     LazyColumn(modifier = Modifier.height(300.dp)) {
                         items(safeList) { consumer ->
+                            val accurate = isAccurate(consumer)
+                            val textColor = if (accurate) TextWhite else WarningOrange
+
                             Column {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
                                             clusterDialogList = null
-                                            onConsumerClick(consumer)
+                                            if (accurate) onConsumerClick(consumer)
+                                            else approxConsumerDialog = consumer
                                         }
                                         .padding(vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val iconRes = if (consumer.isProcessed) R.drawable.ic_pin_green else R.drawable.ic_pin_red
-                                    Icon(painter = painterResource(iconRes), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(32.dp))
+                                    Icon(
+                                        painter = painterResource(iconRes),
+                                        contentDescription = null,
+                                        tint = if (!accurate) WarningOrange else Color.Unspecified,
+                                        modifier = Modifier.size(32.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(consumer.rawAddress, style = MaterialTheme.typography.bodyMedium, color = TextWhite)
-                                        Text(consumer.name, style = MaterialTheme.typography.labelSmall, color = TextSlate)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(consumer.rawAddress, style = MaterialTheme.typography.bodyMedium, color = textColor)
+                                        if (!accurate) {
+                                            Text("⚠️ Приблизна адреса", style = MaterialTheme.typography.labelSmall, color = WarningOrange)
+                                        } else {
+                                            Text(consumer.name, style = MaterialTheme.typography.labelSmall, color = TextSlate)
+                                        }
+                                    }
+
+                                    // 🔥 МАЛЕНЬКА КНОПКА "ПОЇХАТИ" В СПИСКУ
+                                    if (accurate) {
+                                        IconButton(onClick = { openNavigation(consumer) }) {
+                                            Icon(Icons.Default.DirectionsCar, contentDescription = "Поїхати", tint = CyanAction)
+                                        }
                                     }
                                 }
                                 Divider(color = TextSlate.copy(alpha = 0.2f))
@@ -394,18 +481,76 @@ fun MapScreen(
                         }
                     }
                 },
-                confirmButton = { TextButton(onClick = { clusterDialogList = null }) { Text("Закрити", color = CyanAction, fontWeight = FontWeight.Bold) } }
+                confirmButton = {
+                    TextButton(onClick = { clusterDialogList = null }) {
+                        Text("Закрити", color = CyanAction, fontWeight = FontWeight.Bold)
+                    }
+                }
             )
         }
 
-        // 6. 🔥 ДИАЛОГ "ЗВІТ ПОШУКУ" (НОВЫЙ СТИЛЬ)
+        // ДІАЛОГ ПОПЕРЕДЖЕННЯ
+        if (approxConsumerDialog != null) {
+            val c = approxConsumerDialog!!
+            AlertDialog(
+                onDismissRequest = { approxConsumerDialog = null },
+                containerColor = CardColor,
+                titleContentColor = WarningOrange,
+                textContentColor = TextWhite,
+                icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = WarningOrange) },
+                title = { Text("Увага: Неточна адреса") },
+                text = {
+                    Column {
+                        Text(
+                            text = "Точність: ${c.geoPrecision.name}",
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = c.geoMessage ?: "Visicom знайшов лише вулицю або населений пункт.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Рекомендується прив'язати точку вручну, щоб не їхати помилково.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSlate
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            approxConsumerDialog = null
+                            onManualLocationClick(c)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = CyanAction)
+                    ) {
+                        Icon(Icons.Default.EditLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Прив'язати вручну")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        approxConsumerDialog = null
+                        onConsumerClick(c)
+                    }) {
+                        Text("Все одно відкрити", color = TextSlate)
+                    }
+                }
+            )
+        }
+
         if (showNotFoundDialog) {
-            val notFoundList = consumers.filter { it.latitude == null || it.latitude == 0.0 }
+            val notFoundList = consumers.filter { !isValidCoord(it.latitude, it.longitude) }
+
             AlertDialog(
                 onDismissRequest = { showNotFoundDialog = false },
-                containerColor = CardColor, // Темный фон
-                titleContentColor = TextWhite, // Белый заголовок
-                textContentColor = TextWhite, // Белый текст
+                containerColor = CardColor,
+                titleContentColor = TextWhite,
+                textContentColor = TextWhite,
                 title = {
                     Column {
                         Text("Звіт пошуку", fontWeight = FontWeight.Bold)
@@ -418,32 +563,57 @@ fun MapScreen(
                     }
                 },
                 text = {
-                    LazyColumn(modifier = Modifier.height(300.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.height(300.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         items(notFoundList) { consumer ->
-                            Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            showNotFoundDialog = false
-                                            onConsumerClick(consumer)
-                                        }
-                                        .padding(vertical = 12.dp)
-                                ) {
-                                    Column {
-                                        Text(
-                                            consumer.rawAddress,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextWhite
-                                        )
-                                        Text(
-                                            "Координати відсутні",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = ErrorRed.copy(alpha = 0.8f)
-                                        )
+                            Surface(
+                                color = CardColor.copy(alpha = 0.75f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showNotFoundDialog = false
+                                        onConsumerClick(consumer)
                                     }
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+
+                                    // ✅ ЖИРНЫМ: ОР
+                                    Text(
+                                        text = consumer.orNumber,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextWhite
+                                    )
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    // ✅ Обычным: Адрес
+                                    Text(
+                                        text = consumer.rawAddress,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextWhite
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // ✅ Обычным, но КАПСОМ: ФИО
+                                    Text(
+                                        text = consumer.name.uppercase(Locale.getDefault()),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSlate
+                                    )
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    // оставим твой индикатор
+                                    Text(
+                                        "Координати відсутні",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ErrorRed.copy(alpha = 0.85f)
+                                    )
                                 }
-                                Divider(color = TextSlate.copy(alpha = 0.2f))
                             }
                         }
                     }
@@ -455,11 +625,11 @@ fun MapScreen(
                 }
             )
         }
+
     }
 }
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-
+// ... [Інші функції: MapControlsColumn, enableMyLocation, createClusterIcon, groupConsumersByDistance - залишаються без змін] ...
 @Composable
 fun MapControlsColumn(
     onZoomIn: () -> Unit,
@@ -474,30 +644,25 @@ fun MapControlsColumn(
         shadowElevation = 4.dp,
         border = BorderStroke(1.dp, TextWhite.copy(alpha = 0.1f))
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Кнопка "+"
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onZoomIn, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Add, contentDescription = "Zoom In", tint = TextWhite)
             }
 
             Divider(color = TextWhite.copy(alpha = 0.1f), thickness = 1.dp, modifier = Modifier.width(32.dp))
 
-            // Кнопка "-"
             IconButton(onClick = onZoomOut, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Remove, contentDescription = "Zoom Out", tint = TextWhite)
             }
 
             Divider(color = TextWhite.copy(alpha = 0.1f), thickness = 1.dp, modifier = Modifier.width(32.dp))
 
-            // 🔥 ИСПРАВЛЕНИЕ 2: Уменьшенная иконка прицела
             IconButton(onClick = onMyLocation, modifier = Modifier.size(48.dp)) {
                 Icon(
                     painter = painterResource(id = R.drawable.baseline_my_location_24),
                     contentDescription = "My Location",
                     tint = CyanAction,
-                    modifier = Modifier.size(24.dp) // Уменьшили размер иконки внутри кнопки
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
@@ -511,7 +676,7 @@ private fun enableMyLocation(mapView: MapView, context: Context) {
     mapView.invalidate()
 }
 
-fun createBlueClusterIcon(context: Context, count: Int): Drawable {
+fun createClusterIcon(context: Context, count: Int, hasApproximate: Boolean): Drawable {
     val density = context.resources.displayMetrics.density
     val sizePx = (52 * density).toInt()
 
@@ -519,8 +684,12 @@ fun createBlueClusterIcon(context: Context, count: Int): Drawable {
     val canvas = Canvas(bitmap)
 
     val drawable = ContextCompat.getDrawable(context, R.drawable.ic_cluster_bg)
-
     drawable?.let {
+        if (hasApproximate) {
+            it.setTint(android.graphics.Color.parseColor("#F59E0B"))
+        } else {
+            it.setTintList(null)
+        }
         it.setBounds(0, 0, sizePx, sizePx)
         it.draw(canvas)
     }
@@ -537,7 +706,8 @@ fun createBlueClusterIcon(context: Context, count: Int): Drawable {
     val xPos = sizePx / 2f
     val yPos = (sizePx / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
 
-    canvas.drawText(count.toString(), xPos, yPos, paintText)
+    val text = if (hasApproximate) "~$count" else "$count"
+    canvas.drawText(text, xPos, yPos, paintText)
 
     return BitmapDrawable(context.resources, bitmap)
 }
@@ -556,7 +726,8 @@ fun groupConsumersByDistance(consumers: List<Consumer>, thresholdDegrees: Double
         while (iterator.hasNext()) {
             val candidate = iterator.next()
             if (abs(current.latitude!! - candidate.latitude!!) < thresholdDegrees &&
-                abs(current.longitude!! - candidate.longitude!!) < thresholdDegrees) {
+                abs(current.longitude!! - candidate.longitude!!) < thresholdDegrees
+            ) {
                 cluster.add(candidate)
                 iterator.remove()
             }
@@ -566,5 +737,6 @@ fun groupConsumersByDistance(consumers: List<Consumer>, thresholdDegrees: Double
         val avgLon = cluster.map { it.longitude!! }.average()
         groups.add(MarkerGroup(avgLat, avgLon, cluster))
     }
+
     return groups
 }
